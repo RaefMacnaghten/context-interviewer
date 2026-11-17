@@ -1,12 +1,26 @@
 # Decision log
 
-This file records the design decisions made on this project, so that a reader can see which thinking was the author's and which was AI-assisted. Each entry is written from the author's conversation with the AI assistant (Claude, via Claude Code). The author's messages are copied exactly, including typos, spacing and capitalisation, and appear as blockquotes. The AI's side is summarised, except for short recommendation lines, which are quoted. Entries are added on the day of the decision or later, always under the true date of the decision. Nothing is backdated and no entry is invented. Entries run oldest first, newest last, and every entry has the same fields in the same order.
+This file records the design decisions made on this project, so that a reader can see which thinking was the author's and which was AI-assisted. Each entry is written from the author's conversation with the AI assistant (Claude, via Claude Code) and from the author's submitted board answers. The author's messages and submitted answers are copied exactly, including typos, spacing and capitalisation, and appear as blockquotes. The AI's side is summarised, except for short recommendation lines and option texts, which are quoted. Entries are added on the day of the decision or later, always under the true date of the decision. Nothing is backdated and no entry is invented. Entries run oldest first, newest last, and every entry has the same fields in the same order. Entries with the same date are ordered by board question number, with decisions made outside the board after them.
 
-Several entries refer to the design question board. This is a set of 38 design questions in nine themes that the AI prepared on 11 Nov 2026 (described in the report "IIS interviewer idea: scoping board and report", 11 Nov 2026). Each question offers two to four options and marks one as the AI's recommendation. The author answers in his own words. The board builds on the author's Assignment 1 literature review, "Act, ask or wait? Closing the context gap in agents that work on people's tasks".
+Several entries refer to the design question board. This is a set of 38 design questions in nine themes that the AI prepared on 11 Nov 2026 (described in the report "IIS interviewer idea: scoping board and report", 11 Nov 2026). Each question offers two to four options and marks one as the AI's recommendation. The author ticks an option and can add his own words. Where his words go beyond or change the ticked option, his words are the answer. The board builds on the author's Assignment 1 literature review, "Act, ask or wait? Closing the context gap in agents that work on people's tasks".
 
-Where an entry says the submitted wording is not yet recorded, the author's discussion of the question is recorded here, but the final text he submitted on the board has not been copied into this file yet. It will be added under the same entry, with the date it was added.
+The first round of answers, covering questions 1 to 7, is taken from the author's submitted board answers, received 17 Nov 2026. In all seven he ticked the recommended option. In three (questions 2, 6 and 7) he also wrote an answer of his own. For those three, the positions are the author's, and some of the submitted sentences were suggested by the AI in conversation and adopted by him. Each entry says which parts were original and which were AI-assisted, as far as the record supports.
 
-## 1. The problem statement
+## 1. Whether the interviewer idea is the project
+
+**Date:** 17 Nov 2026
+
+**Question:** Design question board, question 1: is the interviewer idea your IIS project?
+
+**AI recommendation:** "Yes. Commit to it now."
+
+**Author's decision:** The author ticked the recommended option, "Yes. Commit to it now.", and wrote no words of his own.
+
+**Why:** No reason was recorded.
+
+**Original / AI-assisted:** The option wording was the AI's. The choice to accept it was the author's.
+
+## 2. The problem statement
 
 **Date:** 17 Nov 2026
 
@@ -16,7 +30,7 @@ Where an entry says the submitted wording is not yet recorded, the author's disc
 
 In the discussion that followed, the AI agreed that all four options are links in one chain: people do not know what to tell an agent, so instructions are incomplete, some answers are in their files, and for the rest the tool must ask or guess. It argued for keeping one sentence, because the module asks for one intelligent behaviour and the evaluation hangs off that sentence. It agreed that elicitation quality is the right measure, and pointed out that quality alone can be gamed by asking everything, so it must be paired with cost. It advised against measuring in a real niche for Assignment 2, because that would need participants. It suggested a merged one-sentence wording.
 
-**Author's decision:** The author overruled the recommended framing. His messages, in order:
+**Author's decision:** The author overruled the recommended framing. His messages in the discussion, in order:
 
 > Is the wider problem not all of these things that the system is trying to solve? The literature review is a component of the implementation in my eyes?
 
@@ -24,13 +38,59 @@ In the discussion that followed, the AI agreed that all four options are links i
 
 > All 4 are components of the problem. We should be measuring the quality of the agent's elicitation of correct infpormation paired with the ideas in option 1
 
-His position: all four options are components of one problem, and the measure is the quality of elicitation of correct information, paired with the cost idea in option 1. The submitted wording of his board answer is not yet recorded here and will be added.
+His position: all four options are components of one problem, and the measure is the quality of elicitation of correct information, paired with the cost idea in option 1.
+
+On the board he ticked the recommended option, option 1, and submitted this answer in his own words. His words change the ticked option, so his words are the answer:
+
+> All four are components of one problem: an agent needs information the person has not given it, and every way of getting it (reading their files, asking, guessing or waiting) has a cost that current tools do not weigh. We should measure the quality of the agent's elicitation of correct information, paired with that cost: correct facts in the brief against questions asked.
 
 **Why:** In the author's view the wider problem is everything the system is trying to solve, not one of the four options alone, and the literature review is a component of the implementation. He also questioned whether option 1 by itself is the right thing to measure, and held that the tool should be judged on how well it elicits correct information.
 
-**Original / AI-assisted:** Original: the reframing of the problem as all four components, and the choice of measure. AI-assisted: the ordering of the four options into one chain, and the argument that quality must be paired with cost.
+**Original / AI-assisted:** Original: the reframing of the problem as all four components, and the choice of measure. AI-assisted: the ordering of the four options into one chain, and the argument that quality must be paired with cost. The AI suggested a merged one-sentence wording in the discussion. The record does not say sentence by sentence how much of the submitted answer is that suggestion, so this entry does not claim it.
 
-## 2. The single result for the Assignment 3 talk
+## 3. Who the person is
+
+**Date:** 17 Nov 2026
+
+**Question:** Design question board, question 3: who is the person, and in which moment?
+
+**AI recommendation:** "Anyone about to hand an everyday task to an agent for the first time."
+
+**Author's decision:** The author ticked the recommended option, "Anyone about to hand an everyday task to an agent for the first time.", and wrote no words of his own.
+
+**Why:** No reason was recorded.
+
+**Original / AI-assisted:** The option wording was the AI's. The choice to accept it was the author's.
+
+## 4. The folder of materials
+
+**Date:** 17 Nov 2026
+
+**Question:** Design question board, question 4: is the folder of materials essential, or a bonus?
+
+**AI recommendation:** "Essential. Read first, ask second."
+
+**Author's decision:** The author ticked the recommended option, "Essential. Read first, ask second.", and wrote no words of his own.
+
+**Why:** No reason was recorded.
+
+**Original / AI-assisted:** The option wording was the AI's. The choice to accept it was the author's.
+
+## 5. What a marker must see working
+
+**Date:** 17 Nov 2026
+
+**Question:** Design question board, question 5: what must a marker be able to see working on 20 November?
+
+**AI recommendation:** "One thin real pass: folder in, a few real decisions to ask or not, a brief out."
+
+**Author's decision:** The author ticked the recommended option, "One thin real pass: folder in, a few real decisions to ask or not, a brief out.", and wrote no words of his own.
+
+**Why:** No reason was recorded.
+
+**Original / AI-assisted:** The option wording was the AI's. The choice to accept it was the author's.
+
+## 6. The single result for the Assignment 3 talk
 
 **Date:** 17 Nov 2026
 
@@ -38,21 +98,23 @@ His position: all four options are components of one problem, and the measure is
 
 **AI recommendation:** "One plot: facts captured against questions asked, for three ask rules."
 
-After decision 1, the AI revised this: keep the plot, but plot correct facts, checked against the hidden answer sheet, not just facts captured, and show the silent wrong guesses for each rule on the same slide. It also advised logging, for every gap and from day one, the source (file, question or guess), whether it was correct, and the running question count.
+After the discussion in entry 2, the AI revised this: keep the plot, but plot correct facts, checked against the hidden answer sheet, not just facts captured, and show the silent wrong guesses for each rule on the same slide. It also advised logging, for every gap and from day one, the source (file, question or guess), whether it was correct, and the running question count.
 
-**Author's decision:** The author's messages on this question were two questions to the AI:
+**Author's decision:** The author's messages in the discussion were two questions to the AI:
 
 > gIVEN what we just discussed, what shouold I do/ say for here?
 
 > What does 'one plot' mean here for question 6
 
-The direction follows from decision 1, where the author insisted on correct information. The submitted wording of his board answer is not yet recorded here and will be added.
+On the board he ticked the recommended option and submitted this answer in his own words. His words change the ticked option, so his words are the answer:
 
-**Why:** The result shown in the talk has to match the measure chosen in decision 1. A plot of facts captured would count wrong facts as well as right ones, which is not what the author asked to be measured.
+> Plot correct facts, checked against the hidden answer sheet, not just facts captured. Show silent wrong guesses for each rule on the same slide, as a marker on each point or a small second panel. Log from day one, for every gap: where the answer came from (file, question or guess), whether it was correct, and the running question count.
 
-**Original / AI-assisted:** Original: the requirement for correctness, which comes from decision 1. AI-assisted: the specific change to the plot and the list of what to log.
+**Why:** The result shown in the talk has to match the measure chosen in entry 2, where the author insisted on correct information. A plot of facts captured would count wrong facts as well as right ones, which is not what the author asked to be measured.
 
-## 3. Reuse after the module
+**Original / AI-assisted:** Original: the requirement for correctness, which comes from entry 2. AI-assisted: the specific change to the plot and the list of what to log, which the AI suggested in the discussion and the author adopted in his submitted answer.
+
+## 7. Reuse after the module
 
 **Date:** 17 Nov 2026
 
@@ -60,9 +122,9 @@ The direction follows from decision 1, where the author insisted on correct info
 
 **AI recommendation:** "Coursework first. Keep only the brief format reusable."
 
-After the author's message below, the AI warned that "Anythign that could be used for wider use cases" is unbounded and contradicts "Nothing else needs to be reusable". It suggested naming three reusable things (the brief format, the per-gap decision log, and the ask rule kept as a plain table) and adding no other abstraction.
+After the author's first message below, the AI warned that "Anythign that could be used for wider use cases" is unbounded and contradicts "Nothing else needs to be reusable". It suggested naming three reusable things (the brief format, the per-gap decision log, and the ask rule kept as a plain table) and adding no other abstraction.
 
-**Author's decision:** The author's message:
+**Author's decision:** The author's message in the discussion:
 
 > Anythign that could be used for wider use cases, should be made in a manner that can be expanded upon.
 
@@ -70,13 +132,15 @@ He paired that with wording the AI had suggested earlier and he adopted:
 
 > Also keep the per-gap decision log in a clean, documented format alongside the brief. It is the evaluation data for A3, and it is what a later corrections loop would read. Nothing else needs to be reusable. Keep everything problem-agnostic.
 
-The submitted wording of his board answer is not yet recorded here and will be added.
+On the board he ticked the recommended option and submitted this answer in his own words. His words go beyond the ticked option, so his words are the answer:
 
-**Why:** The author wants the parts that could serve wider use cases to be built so they can be expanded later. The adopted wording gives the reason for the per-gap decision log: it is the evaluation data for Assignment 3, and it is what a later corrections loop would read.
+> Coursework first. Three things should be reusable: the brief format, the per-gap decision log, and the ask rule kept as a plain table that can be changed without touching code. The log is the evaluation data for A3 and what a later corrections loop would read. For everything else, do not build for reuse, but do not hard-code anything specific to one task either. Add no extra abstraction for future use cases. Keep everything problem-agnostic.
 
-**Original / AI-assisted:** Original: wanting wider reuse. AI-assisted: the bounded three-item version and the wording about the per-gap decision log.
+**Why:** The author wants the parts that could serve wider use cases to be built so they can be expanded later. The submitted answer gives the reason for the per-gap decision log: it is the evaluation data for Assignment 3, and it is what a later corrections loop would read.
 
-## 4. Keep this log
+**Original / AI-assisted:** Original: wanting wider reuse. AI-assisted: the bounded three-item version and the wording about the per-gap decision log, which the AI suggested in the discussion and the author adopted.
+
+## 8. Keep this log
 
 **Date:** 17 Nov 2026
 
@@ -92,4 +156,4 @@ The submitted wording of his board answer is not yet recorded here and will be a
 
 **Why:** To evidence the author's input. The module allows AI use and asks for it to be recorded briefly in the README, and the rubric rewards a record that "distinguishes original, reused and assisted work".
 
-**Original / AI-assisted:** Original: the question about evidencing his input, and the decision to keep a log. AI-assisted: the layout and text of this file, which the AI drafted from the author's verbatim messages.
+**Original / AI-assisted:** Original: the question about evidencing his input, and the decision to keep a log. AI-assisted: the layout and text of this file, which the AI drafted from the author's verbatim messages and submitted board answers.
