@@ -1,8 +1,8 @@
 # ElicitAgent (context-interviewer)
 
-Prose word count: 3382 words (code blocks, commands, inline code and file paths are not counted).
+Prose word count: 3387 words (code blocks, commands, inline code and file paths are not counted).
 
-IIS coursework project. ElicitAgent reads a folder of materials that a person wants an agent to work from, lists what the agent would need to know, and for each gap decides whether to read a file, ask, guess and mark it, or wait. It then writes a brief for the agent and a gap trace that records every decision. "ElicitAgent" is a working name.
+IIS coursework project. ElicitAgent reads a folder of materials that a person wants an agent to work from, lists what the agent would need to know, and fills what the folder states from the files. For each gap that is left, it decides whether to ask, guess and mark it, or wait. It then writes a brief for the agent and a gap trace that records every decision. "ElicitAgent" is a working name.
 
 ## Status
 
@@ -105,7 +105,7 @@ uv run pytest
 
 ### The gap trace
 
-One JSON object per line (`gap-trace.jsonl`). Every line has every field: time, task, run, rule, threshold, model, model_kind (real or simulated), run_label, item, item_label, heading, stated_or_inferred, must_hold_or_nice, chance_wrong (the model's estimate), can_undo, would_notice, harm_band, harm, question_kind, question_cost, way (how the item was handled overall: read a file on the first look, read a file on the second look, ask, guess and mark it, wait, or cannot be done), reason (the one line), event (decided, answer, skip, nobody can answer, and later edit, reject and the limit events), value, source_document, source_passage, question_count, running_cost, limit_reached outcome (filled in by the test: correct, wrong or left open) and waste (filled in by the test: true for a question whose answer the folder held). For an item filled from the folder, the estimate, harm and question fields are empty, because it never reached the ask table.
+One JSON object per line (`gap-trace.jsonl`). Every line has every field: time, task, run, rule, threshold, model, model_kind (real or simulated), run_label, item, item_label, heading, stated_or_inferred, must_hold_or_nice, chance_wrong (the model's estimate), can_undo, would_notice, harm_band, harm, question_kind, question_cost, way (how the item was handled overall: read a file on the first look, read a file on the second look, ask, guess and mark it, wait, or cannot be done), reason (the one line), event (decided, answer, skip, nobody can answer, and later edit, reject and the limit events), value, source_document, source_passage, question_count, running_cost, limit_reached, outcome (filled in by the test: correct, wrong or left open) and waste (filled in by the test: true for a question whose answer the folder held). For an item filled from the folder, the estimate, harm and question fields are empty, because it never reached the ask table.
 
 ## Task folders
 
@@ -131,7 +131,7 @@ Closed: a free-form definition of a gap. Fixed headings with "Other" are kept, b
 
 - 11 to 24 Nov 2026: design questions and answers, recorded with dates in [docs/decisions.md](docs/decisions.md) for the early decisions.
 - 24 Nov 2026: the author approved the build plan (14 points, P1 to P14, and the build order in stages 0 to 7), with two changes of his own: the harm-ratio check gets its own runs, for the talk (P1), and "the model decides freely" is added as a third rule, as a single point (P2).
-- 24 and 25 Nov 2026: this build, as the commits show, one commit per stage.
+- 24 Nov 2026: this build, as the commits show, one commit per stage.
 - 24 Nov 2026, after stage 7: a correction to how the tool reads the folder. The build first read the plan as making "read a file" one of the ask table's outcomes: every item, including those the folder stated, went through the ask table, which then chose to read the file. The author confirmed that reading the folder comes before the ask table. The tool looks in the folder for each item; for anything not found it makes one targeted second look for that item; whatever either look finds is filled from the file with its document and exact passage and never reaches the ask table. Only what is still missing is a gap. The ask table has exactly three outcomes: ask, guess and mark it, or wait. "Cannot be done" is set only by the person's reply to a question. A question whose answer the folder held still counts as waste. What changed in the build: the second look was added to the model interface (one more model call); "read a file" was taken out of the ask table, its file and its tests; the gap trace now records how each item was handled overall (first look, second look, ask, guess and mark it, wait, cannot be done) and has a waste field, which the harness fills; the rota folder gained one rule line so the simulated run shows a second-look find, and the draft rota answer sheet was updated to match. The tests were rerun and the real-model pass was run again.
 - 24 Nov 2026, during stage 1: the first real-model run showed two problems the stand-in had hidden. The page printed a stray "null" under some questions, and the model marked a value as stated from a passage that did not contain it (22:00 from a line saying 22:30). Fixed: the page bug, a check that numbers in a stated value appear in its passage, and a tighter instruction for item labels.
 
@@ -147,6 +147,6 @@ AI assistance (Claude, via Claude Code) was used for design discussion, drafting
 
 The wording of the plan's 14 points (P1 to P14) is the AI's, not the author's. P1, P3, P4 and P14 were settled in discussion with him; the others were the AI's proposals, which he approved with the plan, with his two changes above. [docs/decisions.md](docs/decisions.md) records each early decision with its date, what the AI recommended, what the author decided in his own words, and which parts were original and which were AI-assisted. The log itself was drafted with AI assistance from the author's verbatim messages.
 
-**The code.** The code, tests, task materials and draft answer sheets in this repository were written by an AI coding agent (Claude Opus 5.5 in Claude Code) from the author's approved plan, on 24 and 25 Nov 2026. The two answer sheets are drafts for the author to write and lock.
+**The code.** The code, tests, task materials and draft answer sheets in this repository were written by an AI coding agent (Claude Opus 5.5 in Claude Code) from the author's approved plan, on 24 Nov 2026. The two answer sheets are drafts for the author to write and lock.
 
 **At run time.** The tool itself calls a language model (`claude-sonnet-5-5` by default) to list items and to make the estimates. The ask table, not the model, decides what to do.
