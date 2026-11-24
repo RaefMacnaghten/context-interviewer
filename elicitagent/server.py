@@ -13,9 +13,10 @@ import threading
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlparse
+from urllib.parse import parse_qs, urlparse
 
 from .asktable import AskTable
+from .documents import survey
 from .models import ModelError, make_model
 from .session import REPO_ROOT, Session
 
@@ -54,6 +55,25 @@ def resolve_folder(folder: str) -> Path:
     if (p / "materials").is_dir() and (p / "intent.txt").is_file():
         p = p / "materials"
     return p
+
+
+def folder_tree(folder: str) -> dict:
+    """The chosen folder as a tree, before reading starts. A missing or empty folder gets a plain message."""
+    if not folder.strip():
+        return {"ok": False, "message": "Choose a folder."}
+    p = resolve_folder(folder.strip())
+    shown = str(p.relative_to(REPO_ROOT)) if p.is_relative_to(REPO_ROOT) else str(p)
+    if not p.exists():
+        return {"ok": False, "folder": shown, "message": f"There is no folder at {folder.strip()}."}
+    if not p.is_dir():
+        return {"ok": False, "folder": shown, "message": f"{folder.strip()} is a file, not a folder."}
+    data = survey(p)
+    data.update(ok=True, folder=shown)
+    if data["files"] == 0:
+        data.update(ok=False, message="This folder is empty. There is nothing to read.")
+    elif data["to_read"] == 0:
+        data.update(ok=False, message="Nothing in this folder can be read yet. The files are listed below with the reason.")
+    return data
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -106,6 +126,8 @@ class Handler(BaseHTTPRequestHandler):
                     "limit_start": table.limit_start,
                 }
             )
+        if path == "/api/tree":
+            return self._send_json(folder_tree((parse_qs(urlparse(self.path).query).get("folder") or [""])[0]))
         if path.startswith("/api/session/"):
             parts = path.strip("/").split("/")
             s = self._session(parts[2]) if len(parts) >= 3 else None

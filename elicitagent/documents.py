@@ -49,46 +49,114 @@ def _read_pdf(path: Path) -> str:
     return "\n".join((page.extract_text() or "") for page in reader.pages)
 
 
-def read_folder(path: str | Path) -> Folder:
+TYPE_NAMES = {".md": "Markdown", ".markdown": "Markdown", ".csv": "CSV", ".txt": "Text", ".pdf": "PDF",
+              ".json": "JSON", ".html": "HTML", ".htm": "HTML", ".xml": "XML", ".yaml": "YAML", ".yml": "YAML"}
+CODE_SUFFIXES = {".py", ".js", ".ts", ".tsx", ".jsx", ".java", ".c", ".h", ".cpp", ".cs", ".go", ".rb", ".rs", ".php",
+                 ".sh", ".sql", ".css", ".swift", ".kt", ".r", ".m", ".toml", ".ini", ".cfg"}
+
+
+def type_name(file: Path) -> str:
+    suffix = file.suffix.lower()
+    if suffix in IMAGE_SUFFIXES:
+        return "Image"
+    if suffix in SPREADSHEET_SUFFIXES:
+        return "Spreadsheet"
+    if suffix in CODE_SUFFIXES:
+        return "Code"
+    return TYPE_NAMES.get(suffix, f"{suffix[1:].upper()} file" if suffix else "File")
+
+
+def examine(file: Path, root: Path) -> Document | Skipped | None:
+    """What the reader does with one file: a Document it reads, a Skipped with the reason, or None for a hidden
+    file or one inside a hidden folder, which the reader passes over without listing."""
+    rel = file.relative_to(root).as_posix()
+    if any(part.startswith(".") for part in file.relative_to(root).parts):
+        return None
+    suffix = file.suffix.lower()
+    if suffix in IMAGE_SUFFIXES:
+        return Skipped(rel, "images are planned, not read yet")
+    if suffix in SPREADSHEET_SUFFIXES:
+        return Skipped(rel, "spreadsheets beyond CSV are planned, not read yet")
+    if file.stat().st_size > MAX_BYTES:
+        return Skipped(rel, "larger than 2 MB")
+    if suffix == ".pdf":
+        try:
+            text = _read_pdf(file)
+        except Exception as exc:  # a broken PDF should not stop the run
+            return Skipped(rel, f"PDF could not be read ({exc.__class__.__name__})")
+        if not text.strip():
+            return Skipped(rel, "PDF has no text (scanned images are planned)")
+        return Document(rel, "pdf", text)
+    raw = file.read_bytes()
+    if b"\x00" in raw:
+        return Skipped(rel, "not a plain-text file")
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        text = raw.decode("latin-1")
+    return Document(rel, "text", text)
+
+
+def _files(root: Path) -> list[Path]:
+    return sorted(p for p in root.rglob("*") if p.is_file())
+
+
+def read_folder(path: str | Path, on_file=None) -> Folder:
+    """Read every file the reader can read. on_file(name, n, of, outcome) is called after each file, where
+    outcome is the Document or Skipped, so a caller can show real progress."""
     root = Path(path).resolve()
     if not root.is_dir():
         raise FileNotFoundError(f"Not a folder: {path}")
     folder = Folder(path=root)
-    for file in sorted(p for p in root.rglob("*") if p.is_file()):
-        rel = file.relative_to(root).as_posix()
-        if any(part.startswith(".") for part in file.relative_to(root).parts):
-            continue
-        suffix = file.suffix.lower()
-        if suffix in IMAGE_SUFFIXES:
-            folder.skipped.append(Skipped(rel, "images are planned, not read yet"))
-            continue
-        if suffix in SPREADSHEET_SUFFIXES:
-            folder.skipped.append(Skipped(rel, "spreadsheets beyond CSV are planned, not read yet"))
-            continue
-        if file.stat().st_size > MAX_BYTES:
-            folder.skipped.append(Skipped(rel, "larger than 2 MB"))
-            continue
-        if suffix == ".pdf":
-            try:
-                text = _read_pdf(file)
-            except Exception as exc:  # a broken PDF should not stop the run
-                folder.skipped.append(Skipped(rel, f"PDF could not be read ({exc.__class__.__name__})"))
-                continue
-            if not text.strip():
-                folder.skipped.append(Skipped(rel, "PDF has no text (scanned images are planned)"))
-                continue
-            folder.documents.append(Document(rel, "pdf", text))
-            continue
-        raw = file.read_bytes()
-        if b"\x00" in raw:
-            folder.skipped.append(Skipped(rel, "not a plain-text file"))
-            continue
-        try:
-            text = raw.decode("utf-8")
-        except UnicodeDecodeError:
-            text = raw.decode("latin-1")
-        folder.documents.append(Document(rel, "text", text))
+    files = [f for f in _files(root) if not any(part.startswith(".") for part in f.relative_to(root).parts)]
+    for n, file in enumerate(files, 1):
+        outcome = examine(file, root)
+        if isinstance(outcome, Document):
+            folder.documents.append(outcome)
+        elif isinstance(outcome, Skipped):
+            folder.skipped.append(outcome)
+        if on_file:
+            on_file(outcome.name, n, len(files), outcome)
     return folder
+
+
+def survey(path: str | Path) -> dict:
+    """The folder as a tree, before anything is read by the model: every file and sub-folder, and for each file
+    whether the reader will read it or skip it, and why. Hidden files are listed as skipped."""
+    root = Path(path).resolve()
+
+    def node(d: Path) -> dict:
+        children = []
+        for p in sorted(d.iterdir(), key=lambda x: (x.is_file(), x.name.lower())):
+            rel = p.relative_to(root).as_posix()
+            hidden = p.name.startswith(".")
+            if p.is_dir():
+                if hidden:  # not opened: the reader never looks inside a hidden folder
+                    children.append({"name": p.name, "path": rel, "type": "dir", "children": [], "read": False,
+                                     "reason": "hidden folder, not read"})
+                else:
+                    children.append(node(p))
+            elif p.is_file():
+                outcome = None if hidden else examine(p, root)
+                entry = {"name": p.name, "path": rel, "type": "file", "kind": type_name(p), "bytes": p.stat().st_size}
+                if isinstance(outcome, Document):
+                    entry.update(read=True, reason=None, kind="PDF with text" if outcome.kind == "pdf" else entry["kind"])
+                else:
+                    entry.update(read=False, reason=outcome.reason if outcome else "hidden file, not read")
+                children.append(entry)
+        return {"name": d.name, "path": d.relative_to(root).as_posix() if d != root else "", "type": "dir",
+                "children": children}
+
+    tree = node(root)
+    files = [n for n in _walk(tree) if n["type"] == "file"]
+    return {"tree": tree, "files": len(files), "to_read": sum(1 for f in files if f["read"]),
+            "skipped": sum(1 for f in files if not f["read"])}
+
+
+def _walk(n: dict):
+    yield n
+    for c in n.get("children", []):
+        yield from _walk(c)
 
 
 def _squash(text: str) -> str:

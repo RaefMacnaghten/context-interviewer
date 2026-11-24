@@ -43,9 +43,14 @@ async function init() {
   config = await api("/api/config");
   const taskSelect = $("#task-select");
   for (const t of config.tasks) taskSelect.append(el("option", { value: t.folder }, `${t.name} (${t.folder})`));
-  taskSelect.addEventListener("change", () => { $("#folder-input").value = ""; fillIntent(taskSelect.value); });
-  $("#folder-input").addEventListener("input", (ev) => fillIntent(ev.target.value.trim() || taskSelect.value));
+  taskSelect.addEventListener("change", () => { $("#folder-input").value = ""; fillIntent(taskSelect.value); loadTree(); });
+  $("#folder-input").addEventListener("input", (ev) => {
+    fillIntent(ev.target.value.trim() || taskSelect.value);
+    clearTimeout(treeTimer);
+    treeTimer = setTimeout(loadTree, 300);
+  });
   fillIntent(taskSelect.value);
+  loadTree();
   const ruleSelect = $("#rule-select");
   for (const r of config.rules) {
     const thr = r.threshold === null || r.threshold === undefined ? "" : `, ${r.threshold_name} = ${r.threshold}`;
@@ -65,6 +70,52 @@ async function init() {
       location.hash = "";
     }
   }
+}
+
+// Change 2: once a folder is chosen, and before reading starts, show its files and sub-folders as a tree, marking
+// which will be read and which are skipped, and why. Reading starts only when the person presses the button.
+let treeTimer = null;
+let treeSeq = 0;
+async function loadTree() {
+  const folder = $("#folder-input").value.trim() || $("#task-select").value;
+  const pane = $("#tree-pane");
+  const seq = ++treeSeq;
+  let t;
+  try {
+    t = await api(`/api/tree?folder=${encodeURIComponent(folder)}`);
+  } catch (e) {
+    t = { ok: false, message: e.message };
+  }
+  if (seq !== treeSeq) return; // a newer choice has been made
+  const button = $("#start-form button[type=submit]");
+  button.disabled = !t.ok;
+  const head = el("div", { class: "tree-head" },
+    el("span", { class: "tree-title" }, "Files in this folder"),
+    t.folder ? el("span", { class: "tree-folder" }, t.folder) : null);
+  if (!t.tree) {
+    pane.replaceChildren(head, el("p", { class: "tree-msg" }, t.message));
+    return;
+  }
+  const summary = `${t.files} ${t.files === 1 ? "file" : "files"}: ${t.to_read} will be read` +
+    (t.skipped ? `, ${t.skipped} skipped` : "") + ". Nothing is read until you press \"Read the folder\".";
+  pane.replaceChildren(...[head,
+    t.ok ? null : el("p", { class: "tree-msg" }, t.message),
+    el("p", { class: "tree-summary" }, summary),
+    el("ul", { class: "tree", role: "tree" }, t.tree.children.map(treeNode))].filter(Boolean));
+}
+
+function treeNode(n) {
+  if (n.type === "dir") {
+    return el("li", { class: "tree-dir", role: "treeitem" },
+      el("div", { class: "tree-row" }, el("span", { class: "tree-name" }, `${n.name}/`),
+        n.reason ? el("span", { class: "tree-status skip" }, `Skipped: ${n.reason}`) : el("span", { class: "tree-kind" }, "Folder")),
+      n.children.length ? el("ul", { role: "group" }, n.children.map(treeNode)) : null);
+  }
+  return el("li", { class: `tree-file ${n.read ? "read" : "skip"}`, role: "treeitem" },
+    el("div", { class: "tree-row" },
+      el("span", { class: "tree-name" }, n.name),
+      el("span", { class: "tree-kind" }, n.kind),
+      el("span", { class: `tree-status ${n.read ? "read" : "skip"}` }, n.read ? "Will be read" : `Skipped: ${n.reason}`)));
 }
 
 // The box is pre-filled from the task folder's intent.txt so the person can edit it. A folder with no such file

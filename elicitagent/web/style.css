@@ -203,3 +203,15 @@ form label .hint { display: block; font-weight: 400; color: var(--muted); margin
 input[type=text], select { height: 38px; }
 form .row > label { margin: 10px 0 0; }
 form .row { margin-bottom: 10px; }
+
+/* change 2: the folder tree (restyled in change 4) */
+.tree-pane { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 10px 0; }
+.tree-head { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+.tree-title { font-weight: 600; font-size: 13px; }
+.tree-folder { font-family: ui-monospace, monospace; font-size: 12px; color: var(--muted); }
+.tree-summary, .tree-msg { font-size: 13px; margin: 6px 0; }
+.tree, .tree ul { list-style: none; margin: 0; padding-left: 0; }
+.tree ul { padding-left: 18px; border-left: 1px dashed var(--line); margin-left: 6px; }
+.tree-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 2fr); gap: 8px; font-size: 13px; padding: 2px 0; }
+.tree-name { font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
+.tree-status.skip { color: var(--muted); }
