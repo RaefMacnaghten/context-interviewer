@@ -1,6 +1,6 @@
 # ElicitAgent (context-interviewer)
 
-Prose word count: 4426 words (code blocks, commands, inline code and file paths are not counted).
+Prose word count: 4787 words (code blocks, commands, inline code and file paths are not counted).
 
 IIS coursework project. A person says in one or two sentences what they want an agent to do and hands over a folder of materials for it to work from. ElicitAgent reads the folder, lists what the agent would need to know, and fills what the folder states from the files. For each gap that is left, it decides whether to ask, guess and mark it, or wait. It then writes a brief for the agent and a gap trace that records every decision. "ElicitAgent" is a working name.
 
@@ -131,8 +131,13 @@ Closed: a free-form definition of a gap. Fixed headings with "Other" are kept, b
 
 ## Development record
 
-- 11 to 24 Nov 2026: design questions and answers, recorded with dates in [docs/decisions.md](docs/decisions.md) for the early decisions.
-- 24 Nov 2026: the author approved the build plan (14 points, P1 to P14, and the build order in stages 0 to 7), with two changes of his own: the harm-ratio check gets its own runs, for the talk (P1), and "the model decides freely" is added as a third rule, as a single point (P2).
+The design decisions are recorded with dates in [docs/decisions.md](docs/decisions.md); the entry numbers below point to it.
+
+- 11 Nov 2026: the author's idea for the project, an interview tool that builds a viewable model of the problem with review points and works from a folder of materials; the problem-agnostic scope; the link to his own Assignment 1 review; and his choice to settle design intent by questions before any screens, after he rejected the AI's first set of screens as premature (entries 1 to 4).
+- 17 Nov 2026: the first round of the design question board (entries 5 to 11), where the author reframed the problem and the measure; he then made the board adapt to his answers and started the decision log (entries 12 and 13).
+- 18 to 19 Nov 2026: the nine design lines. Seven of the nine changed because of the author's challenges (entries 14 to 20); lines 7 and 9 changed as consequences or for naming, not from a challenge.
+- 24 Nov 2026: the author's decisions and corrections (entries 21 to 31), and the items the AI raised and he confirmed (the log's closing section).
+- 24 Nov 2026: the author approved the build plan (14 points, P1 to P14, and the build order in stages 0 to 7), with two changes: the harm-ratio check gets its own runs, for the talk (P1), which followed his question about the harm scale (entry 23); and "the model decides freely" is added as a third rule, as a single point (P2), an option the AI offered and he chose to add.
 - 24 Nov 2026: this build, as the commits show, one commit per stage.
 - 24 Nov 2026, after the wording change: an intent box, confirmed by the author. The tool had no place for the person to say what they want done in their own words, so the goal had to be read from the folder, where it may be missing, out of date or different from what the person now wants. The start page now has a box beside the folder picker, "What do you want the agent to do? One or two sentences". What is typed is the first goal item, confirmed by the person, and is the task in every model call. If the folder states a different goal, the person settles which is right with a choose question. Left empty, the tool works out the goal from the folder as before. Each task folder's `request.txt` already held one sentence of what the person asks the agent to do, so it became the intent line, renamed `intent.txt`, rather than a second file with the same meaning. What changed in the build: the start page, the session, the model interface (the first look always lists the folder's goal and says whether it agrees with the intent), the stand-in for the rota task (it counts only the intent it was written for as agreeing), the brief, the gap trace (a new way, "said by the person", with the person as the source), the harness (it supplies the intent and does not mark it) and the tests. It has run only on the simulated model.
 - 24 Nov 2026, after the reading correction: a wording change, confirmed by the author. The fifth way to handle an item was called "cannot be done", and its reply button read "nobody can answer this". Both were false as written: someone in the world usually can answer. What is true is that the person in the session cannot, and the folder does not hold it. So the fifth way is now named "not available here", the reply reads "I can't answer this", its optional box reads "Who could?", and the brief says "Not available: ask [name] before acting", or "Not available: find out before acting" when no one is named. It stays distinct from skip: skip means not now and the item stays open, while "I can't answer this" means asking this person again will not help, so the tool stops asking and records who to go to. Behaviour is unchanged. The names changed everywhere: the page, the end screen, the brief, the gap trace's way and event values, the ask table's comments, the harness and its summary, the draft answer sheets, the tests and the code. The real-model runs listed above were made under the old labels.
@@ -143,13 +148,19 @@ Closed: a free-form definition of a gap. Fixed headings with "Other" are kept, b
 
 AI assistance (Claude, via Claude Code) was used for design discussion, drafting and, for this build, writing the code.
 
-**The design.** The ideas began from the author's own description of the tool and how he wanted it to work. The AI drafted lines from that description; the author refined, edited or accepted each over several rounds, with his own input on how it should work. In his words:
+**The design.** The ideas began from the author's own description of the tool and how he wanted it to work. The AI drafted lines from that description; the author refined, edited or accepted each over several rounds, with his own input on how it should work. [docs/decisions.md](docs/decisions.md) gives the detail, entry by entry.
+
+What was the author's: the idea (entry 1); the problem-agnostic scope (entry 2); the process, which settled design intent by questions before any screens and made the question board adapt to his answers (entries 4 and 12); the challenges that changed seven of the nine design lines (entries 14 to 20); and his corrections of 24 Nov 2026 (entries 21 to 30), among them that reading the folder comes before the rule, that "Nobody can answer this" was a false label, that the step where the person states their intent was missing, and the name.
+
+What was the AI's: the drafting and wording of the design and the plan; the items it raised and he confirmed (the named-person rule, the targeted second look, the fifth state now named "Not available here" and first called "cannot be done", the two yes-or-no harm checks, and the third rule, the skip button, the source expansion and the "why this question" panel, listed in the log's closing section); and the code.
+
+In his words:
 
 > all lines / ideas were drafted by the AI from my initial description of the tool and how I wanted it to work.
 
 > it was an iterative process for all of the points, right? I gave a lot of my own personal input on how I wanted it to be so it was drafted by AI and refined and edited, and/or accepted by me, depending on the quality of the AI's proposition.
 
-The wording of the plan's 14 points (P1 to P14) is the AI's, not the author's. P1, P3, P4 and P14 were settled in discussion with him; the others were the AI's proposals, which he approved with the plan, with his two changes above. [docs/decisions.md](docs/decisions.md) records each early decision with its date, what the AI recommended, what the author decided in his own words, and which parts were original and which were AI-assisted. The log itself was drafted with AI assistance from the author's verbatim messages.
+The wording of the plan's 14 points (P1 to P14) is the AI's, not the author's. P1, P3, P4 and P14 were settled in discussion with him; the others were the AI's proposals, which he approved with the plan, with the two changes above. [docs/decisions.md](docs/decisions.md) records each early decision with its date, what the AI recommended, what the author decided in his own words, and which parts were original and which were AI-assisted. The log itself was drafted with AI assistance from the author's verbatim messages.
 
 **The code.** The code, tests, task materials and draft answer sheets in this repository were written by an AI coding agent (Claude Opus 5.5 in Claude Code) from the author's approved plan, on 24 Nov 2026. The two answer sheets are drafts for the author to write and lock.
 
