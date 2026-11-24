@@ -2,6 +2,8 @@
 
 Everything in this folder is invented for testing ElicitAgent. The event, the hall and every person are fictional.
 
+We run the Folk Afternoon every year. This is the plan for this year's.
+
 ## The day
 
 - Date: Saturday 6 March 2027
