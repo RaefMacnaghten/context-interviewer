@@ -1,0 +1,13 @@
+name,email,roles_ok,available,notes
+Ada Testwell,ada.testwell@example.org,door;raffle,all day,Team lead for the door
+Basil Example,basil.example@example.org,bar;stage,from 14:00,Personal licence holder
+Cora Sample,cora.sample@example.org,bar;door,until 17:00,
+Dev Placeholder,dev.placeholder@example.org,stage,all day,Runs the sound desk
+Edie Fictional,edie.fictional@example.org,first aid;door,all day,First aid certificate expires January 2027
+Fenn Mockridge,fenn.mockridge@example.org,bar;door,all day,16 years old
+Gus Dummyford,gus.dummyford@example.org,raffle;door,from 15:00,
+Hana Notreal,hana.notreal@example.org,first aid,until 18:00,First aid certificate
+Ivo Madeup,ivo.madeup@example.org,stage;bar,all day,
+Juno Pretendle,juno.pretendle@example.org,door;raffle,all day,Would rather not share a shift with Ivo
+Kit Inventa,kit.inventa@example.org,any,ask me,
+Lou Samplesworth,lou.samplesworth@example.org,bar;raffle,until 19:00,
