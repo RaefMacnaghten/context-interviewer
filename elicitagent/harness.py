@@ -5,8 +5,9 @@ item (same heading, most words in common) and replies from it. A "nowhere" row
 is answered "nobody can answer this"; a question with no matching row is
 skipped. After the brief is written, each item is marked against its row:
 correct, wrong or left open for rows with an exact or yes-or-no answer;
-"to mark by hand" for free-text rows. An outcome line goes into the gap trace
-for every item.
+"to mark by hand" for free-text rows. A question whose answer the sheet says
+lives in a file is counted as waste. An outcome line, with the waste flag,
+goes into the gap trace for every item.
 
 This is one dry run, not the experiment. The answer sheets in this repository
 are drafts, so nothing this harness prints is a result.
@@ -132,6 +133,13 @@ def mark(it: Item, row: SheetRow | None) -> str:
     return "correct" if same_answer(it.value, row.answer) else "wrong"
 
 
+def is_waste(it: Item, row: SheetRow | None) -> bool | None:
+    """A question whose answer the folder held still counts as waste. None when the sheet has no row for the item."""
+    if row is None:
+        return None
+    return bool(it.asked) and row.where.strip().lower().startswith("file:")
+
+
 def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", threshold: float | None = None,
             sheet: str | None = None, runs_dir: str | None = None) -> int:
     task_dir = Path(task).resolve()
@@ -158,14 +166,17 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
         if row:
             matched_rows.add(row.id)
         outcome = mark(it, row)
-        outcomes[it.id] = {"label": it.label, "row": row.id if row else None, "state": it.state, "value": it.value, "outcome": outcome}
-        session._log(it, "outcome", it.value, outcome)
+        waste = is_waste(it, row)
+        outcomes[it.id] = {"label": it.label, "row": row.id if row else None, "state": it.state, "value": it.value,
+                           "way": it.way, "outcome": outcome, "waste": waste}
+        session._log(it, "outcome", it.value, outcome, waste)
     missed = [r.id for r in rows if r.id not in matched_rows]
 
     counts: dict[str, int] = {}
     for o in outcomes.values():
         counts[o["outcome"]] = counts.get(o["outcome"], 0) + 1
     silent_wrong = sum(1 for it in session.items if outcomes[it.id]["outcome"] == "wrong" and not it.asked)
+    wasted = [it for it in session.items if outcomes[it.id]["waste"]]
     summary = {
         "task": session.task,
         "run": session.run,
@@ -178,6 +189,10 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
         "question_cost": session.running_cost,
         "outcomes": counts,
         "silent_wrong_guesses": silent_wrong,
+        "wasted_questions": len(wasted),
+        "wasted_question_cost": sum(it.cost for it in wasted),
+        "filled_from_the_folder": {"first look": sum(1 for it in session.items if it.way == "read a file (first look)"),
+                                   "second look": sum(1 for it in session.items if it.way == "read a file (second look)")},
         "sheet_rows_not_found_by_the_tool": missed,
         "questions": [{"item": i, "kind": k, "reply": a, "row": r} for i, k, a, r in asked],
         "items": outcomes,
@@ -186,6 +201,7 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
     print(f"Dry run on {session.task}, {session.run_label}, against {sheet_path.name} (a draft, so this is not a result).")
     print(f"Questions asked: {session.question_count}, question cost {session.running_cost:g}.")
     print("Outcomes: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
-    print(f"Silent wrong guesses: {silent_wrong}. Sheet rows the tool did not find: {', '.join(missed) or 'none'}.")
+    print(f"Silent wrong guesses: {silent_wrong}. Wasted questions (the folder held the answer): {len(wasted)}, "
+          f"question cost {sum(it.cost for it in wasted):g}. Sheet rows the tool did not find: {', '.join(missed) or 'none'}.")
     print(f"Written to {session.run_dir}")
     return 0

@@ -62,3 +62,18 @@ def test_marking():
     assert mark(t, match_row(t, r)) == "left open"
     rule = item("Personal licence holder on every bar shift", heading="Rules", value="At least one on every bar shift")
     assert mark(rule, match_row(rule, r)) == "to mark by hand"
+
+
+def test_waste_is_a_question_the_folder_could_have_answered():
+    from elicitagent.harness import is_waste
+
+    r = rows()
+    asked_file = item("Setup start time", value="12:00")
+    asked_file.asked = True
+    assert is_waste(asked_file, match_row(asked_file, r)) is True
+    asked_head = item("Who counts as a team lead", heading="People")
+    asked_head.asked = True
+    assert is_waste(asked_head, match_row(asked_head, r)) is False
+    not_asked = item("Setup start time", value="12:00")
+    assert is_waste(not_asked, match_row(not_asked, r)) is False
+    assert is_waste(asked_file, None) is None

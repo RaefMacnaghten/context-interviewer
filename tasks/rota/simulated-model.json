@@ -1,5 +1,8 @@
 {
   "about": "SIMULATED MODEL. Fixed, plausible responses written by hand for the rota task so the tool and its tests run with no API key. Not the output of a language model. The tool never reads this file as a material.",
+  "second_look": {
+    "s21": {"value": "no", "document": "roles-and-rules.md", "passage": "Only give people roles they signed up for."}
+  },
   "items": [
     {"id": "s01", "heading": "Goal and deliverable", "key": "deliverable", "label": "What the agent must produce", "value": "A volunteer rota for the day, shift by shift", "candidates": [], "stated": true, "must_hold": true, "document": "event-plan.md", "passage": "Please make the volunteer rota for the day and send it to everyone.", "about_named_person": false,
      "estimate": {"chance_wrong": 0.1, "can_undo": true, "would_notice": true, "model_would_ask": false}},

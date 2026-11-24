@@ -27,7 +27,7 @@ def test_confirm_edit_reject_restore_each_write_a_full_trace_line(s):
     assert assumed.state == "confirmed" and assumed.source == "person"
     assert last(s)["event"] == "confirm" and list(last(s).keys()) == TRACE_FIELDS
 
-    read = next(i for i in s.items if i.way == "read a file")
+    read = next(i for i in s.items if i.way == "read a file (first look)")
     s.control(read.id, "edit", "13:00")
     assert read.value == "13:00" and read.state == "confirmed" and read.source == "person"
     assert last(s)["event"] == "edit" and last(s)["value"] == "13:00"

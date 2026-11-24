@@ -1,4 +1,9 @@
-"""The ask table: turns the model's estimates into one of the ways to handle a gap.
+"""The ask table: turns the model's estimates for one gap into one of three outcomes.
+
+A gap is an item still missing after the folder has been read (a first look,
+then one targeted second look). Items found in the folder never reach the ask
+table. The table has exactly three outcomes: ask, guess and mark it, or wait.
+"Cannot be done" is never an outcome here: only the person's reply sets it.
 
 The language model only estimates the chance a guess is wrong and answers the
 two yes-or-no checks. Everything in this module is fixed arithmetic over the
@@ -13,6 +18,7 @@ from pathlib import Path
 
 DEFAULT_PATH = Path(__file__).resolve().parent.parent / "asktable.toml"
 EPSILON = 1e-9
+OUTCOMES = ("ask", "guess and mark it", "wait")
 
 
 @dataclass(frozen=True)
@@ -25,14 +31,13 @@ class Gap:
     candidates: int = 0
     named_person: bool = False
     conflict: bool = False
-    stated: bool = False  # stated in a document, with the passage found there
     model_would_ask: bool | None = None
     has_value: bool = True  # False when there is nothing to guess from
 
 
 @dataclass(frozen=True)
 class Decision:
-    way: str  # "read a file", "ask", "guess and mark it" or "wait"
+    way: str  # one of OUTCOMES
     asks: bool
     kind: str  # "confirm", "choose" or "open"
     cost: float
@@ -130,9 +135,6 @@ class AskTable:
                 reason = "Asked: this rule asks every item."
             if gap.named_person:
                 reason += " It is about a named person, so it is an open question."
-        elif gap.stated and not gap.conflict:
-            way = "read a file"
-            reason = "Read from a file: the folder states it."
         elif gap.named_person and self.named_person.get("never_guessed", True):
             way = "wait"
             reason = "Left open: personal facts about a named person are never guessed."

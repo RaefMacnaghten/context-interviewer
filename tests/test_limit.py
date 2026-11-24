@@ -80,4 +80,4 @@ def test_limit_off_in_the_test(tmp_path):
     while (q := s.current_question()) is not None:
         s.reply(q.id, "skip")
         n += 1
-    assert n == 9 and not s.limit_reached
+    assert n == 8 and not s.limit_reached  # 8 gaps are asked under k = 1 once the folder has been read twice

@@ -13,7 +13,8 @@ if TYPE_CHECKING:
 
 def _source_note(it: "Item") -> str:
     if it.state == "confirmed" and it.source == "file":
-        return f'confirmed, from {it.document}: "{" ".join((it.passage or "").split())}"'
+        second = " (found on a second look)" if it.way.endswith("(second look)") else ""
+        return f'confirmed, from {it.document}{second}: "{" ".join((it.passage or "").split())}"'
     if it.state == "confirmed" and it.source == "person":
         if it.sources:
             return "confirmed by the person, where the documents disagreed (" + "; ".join(f'{src["value"]} in {src["document"]}' for src in it.sources) + ")"

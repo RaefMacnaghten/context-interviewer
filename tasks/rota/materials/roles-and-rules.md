@@ -15,3 +15,4 @@
 - A qualified first aider must be on site whenever the public are in the hall.
 - Nobody works more than 4 hours in total, except team leads.
 - Everyone gets a 30-minute break.
+- Only give people roles they signed up for.

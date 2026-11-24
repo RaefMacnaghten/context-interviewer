@@ -6,9 +6,11 @@
   estimates from a JSON file, so the tool and its tests run with no key. Every
   run made with it is labelled "simulated".
 
-The model does two things only: it lists items under the headings with their
-sources, and for each item it estimates the chance a guess is wrong and answers
-the two yes-or-no checks. It never chooses what to do; the ask table does.
+The model does three things only: it lists items under the headings with their
+sources (the first look), looks again in the folder for each item the first
+look did not find (one targeted second look), and, for each item still missing
+(a gap), estimates the chance a guess is wrong and answers the two yes-or-no
+checks. It never chooses what to do; the ask table does.
 """
 
 from __future__ import annotations
@@ -35,6 +37,13 @@ class Model(ABC):
     @abstractmethod
     def list_items(self, request: str, folder: Folder) -> list[dict]:
         """Items under the eight headings and "other", with stated or inferred, must hold or nice, and sources."""
+
+    @abstractmethod
+    def second_look(self, request: str, folder: Folder, items: list[dict]) -> dict[str, dict | None]:
+        """One targeted second look in the folder for each item the first look did not find.
+
+        Per item id: {"value", "document", "passage"} when the folder states it, else None.
+        """
 
     @abstractmethod
     def estimate(self, request: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
@@ -69,6 +78,10 @@ class SimulatedModel(Model):
             out.append(item)
         return out
 
+    def second_look(self, request: str, folder: Folder, items: list[dict]) -> dict[str, dict | None]:
+        found = self.script.get("second_look", {})
+        return {item["id"]: found.get(item["id"]) for item in items}
+
     def estimate(self, request: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
         by_id = {raw["id"]: raw.get("estimate", {}) for raw in self.script["items"]}
         return {item["id"]: by_id.get(item["id"], {}) for item in items}
@@ -95,7 +108,39 @@ For each item give:
 
 List items that are missing from the folder too, with value null and stated false: the gaps are the point. Do not decide whether to ask; only list."""
 
-ESTIMATE_SYSTEM = """You help decide how sure an AI agent can be about each item it needs before doing a task. For each item, answer only these:
+SECOND_LOOK_SYSTEM = """You help a person hand a task to an AI agent. An earlier reading of their folder did not find a stated value for the items below. For each item, look again through the folder specifically for that item, including tables, CSV rows, notes and email text.
+
+For each item return:
+- id: the item's id.
+- found: true only if a document in the folder states the value directly. Inferring or guessing does not count.
+- value: the value as the document states it, or null.
+- document: the file name exactly as given, or null.
+- passage: the exact text copied character for character from that document that states the value, or null. Never paraphrase a passage."""
+
+SECOND_LOOK_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "results": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "found": {"type": "boolean"},
+                    "value": {"type": ["string", "null"]},
+                    "document": {"type": ["string", "null"]},
+                    "passage": {"type": ["string", "null"]},
+                },
+                "required": ["id", "found", "value", "document", "passage"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["results"],
+    "additionalProperties": False,
+}
+
+ESTIMATE_SYSTEM = """You help decide how sure an AI agent can be about each item it needs before doing a task. The folder has already been read twice and does not state these items. For each item, answer only these:
 - chance_wrong: your estimate, from 0 to 1, of the chance that the agent's best guess for this item would be wrong if nobody asked the person.
 - can_undo: if the agent acted on a wrong value for this item, could the mistake be undone afterwards? true or false.
 - would_notice: if the agent acted on a wrong value, would the person notice the mistake? true or false.
@@ -227,6 +272,21 @@ class AnthropicModel(Model):
         system = LIST_SYSTEM.format(headings=", ".join(f'"{h}"' for h in ALL_HEADINGS))
         user = f"The person's request:\n<request>\n{request}\n</request>\n\nThe folder:\n{_folder_as_text(folder)}"
         return self._call(system, user, LIST_SCHEMA)["items"]
+
+    def second_look(self, request: str, folder: Folder, items: list[dict]) -> dict[str, dict | None]:
+        if not items:
+            return {}
+        slim = [{k: item.get(k) for k in ("id", "heading", "label")} for item in items]
+        user = (
+            f"The person's request:\n<request>\n{request}\n</request>\n\nThe folder:\n{_folder_as_text(folder)}\n\n"
+            f"Look again for each of these items:\n{json.dumps(slim, indent=1)}"
+        )
+        data = self._call(SECOND_LOOK_SYSTEM, user, SECOND_LOOK_SCHEMA)
+        out: dict[str, dict | None] = {item["id"]: None for item in items}
+        for r in data["results"]:
+            if r.get("id") in out and r.get("found") and r.get("value") and r.get("document") and r.get("passage"):
+                out[r["id"]] = {"value": r["value"], "document": r["document"], "passage": r["passage"]}
+        return out
 
     def estimate(self, request: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
         slim = [

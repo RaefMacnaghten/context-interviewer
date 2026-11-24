@@ -162,9 +162,22 @@ def test_p4_only_cost_weighted_can_wait(table):
     assert d.way == "guess and mark it"
 
 
-def test_stated_in_a_file_is_read_not_guessed(table):
-    d = table.decide(Gap(0.02, False, False, candidates=1, stated=True), "cost-weighted", 1)
-    assert d.way == "read a file"
+@pytest.mark.parametrize("rule", ["cost-weighted", "confidence-only", "model-decides", "always-ask", "never-ask"])
+def test_the_ask_table_has_exactly_three_outcomes(table, rule):
+    from elicitagent.asktable import OUTCOMES
+
+    assert OUTCOMES == ("ask", "guess and mark it", "wait")
+    seen = set()
+    for p in (0.0, 0.05, 0.3, 0.5, 0.9, 1.0):
+        for can_undo in (True, False):
+            for notice in (True, False):
+                for cands in (0, 1, 3, 6):
+                    for named in (True, False):
+                        for has_value in (True, False):
+                            g = Gap(p, can_undo, notice, candidates=cands, named_person=named, has_value=has_value,
+                                    model_would_ask=p > 0.4)
+                            seen.add(table.decide(g, rule).way)
+    assert seen <= set(OUTCOMES)
 
 
 def test_nothing_to_guess_is_left_open(table):

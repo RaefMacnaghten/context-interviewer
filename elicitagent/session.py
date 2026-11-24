@@ -16,6 +16,11 @@ from .models import Model
 from .trace import GapTrace
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# How an item can be handled overall. The first two are reading the folder, which comes before the ask
+# table; the ask table's three outcomes follow; "cannot be done" is set only by the person's reply.
+FIRST_LOOK = "read a file (first look)"
+SECOND_LOOK = "read a file (second look)"
 DEFAULT_RUNS_DIR = REPO_ROOT / "runs"
 
 
@@ -33,12 +38,12 @@ class Item:
     passage: str | None
     passage_found: bool
     named_person: bool
-    # the model's estimate and the two checks
-    chance_wrong: float = 0.5
-    can_undo: bool = True
-    would_notice: bool = True
+    # the model's estimate and the two checks (only for gaps; None for items filled from the folder)
+    chance_wrong: float | None = None
+    can_undo: bool | None = None
+    would_notice: bool | None = None
     model_would_ask: bool | None = None
-    # the ask table's decision
+    # how the item was handled: filled from the folder, or the ask table's outcome for a gap
     way: str = ""
     kind: str = ""
     cost: float = 0.0
@@ -179,10 +184,34 @@ class Session:
 
     def start(self) -> "Session":
         self.folder = read_folder(self.folder_path)
+        # First look: the model lists items with their sources; clashes between documents are merged (P11).
         raw_items = self.model.list_items(self.request, self.folder)
         items = merge_clashes([self._normalise(raw, i) for i, raw in enumerate(raw_items)])
-        estimates = self.model.estimate(self.request, self.folder, [self._model_view(it) for it in items])
+        # Reading the folder comes before the ask table. An item the folder states is filled from the file
+        # and never reaches the ask table.
+        missing = []
         for it in items:
+            if it.state == "conflict":
+                continue  # the documents disagree: a gap, settled by a choose question
+            if it.stated:
+                self._fill_from_file(it, FIRST_LOOK)
+            else:
+                missing.append(it)
+        # One targeted second look for each item the first look did not find.
+        if missing:
+            found = self.model.second_look(self.request, self.folder, [self._model_view(it) for it in missing])
+            for it in missing:
+                hit = found.get(it.id)
+                if hit and self._verified(hit):
+                    it.value = hit["value"]
+                    if it.value not in it.candidates:
+                        it.candidates.insert(0, it.value)
+                    it.document, it.passage, it.passage_found, it.stated = hit["document"], hit["passage"], True, True
+                    self._fill_from_file(it, SECOND_LOOK)
+        # Only what is still missing is a gap. The model estimates for gaps only; the ask table decides.
+        gaps = [it for it in items if not it.way]
+        estimates = self.model.estimate(self.request, self.folder, [self._model_view(it) for it in gaps]) if gaps else {}
+        for it in gaps:
             est = estimates.get(it.id) or {}
             it.chance_wrong = min(1.0, max(0.0, float(est.get("chance_wrong", 0.5))))
             if it.state == "conflict":
@@ -191,12 +220,22 @@ class Session:
             it.can_undo = bool(est.get("can_undo", True))
             it.would_notice = bool(est.get("would_notice", True))
             it.model_would_ask = est.get("model_would_ask")
+            self._decide(it)
         self.items = items
         for it in self.items:
-            self._decide(it)
             self._log(it, "decided", it.value)
         self._check_limit()
         return self
+
+    def _fill_from_file(self, it: Item, look: str) -> None:
+        it.way = look
+        it.state, it.source = "confirmed", "file"
+        which = "first" if look == FIRST_LOOK else "second"
+        it.reason = f"Filled from {it.document} on the {which} look."
+
+    def _verified(self, hit: dict) -> bool:
+        doc = self.folder.get(hit.get("document") or "") if self.folder else None
+        return passage_found(doc, hit.get("passage")) and value_supported(hit.get("value"), hit.get("passage"))
 
     def _normalise(self, raw: dict, index: int) -> Item:
         heading = raw.get("heading") if raw.get("heading") in ALL_HEADINGS else OTHER
@@ -246,7 +285,6 @@ class Session:
             candidates=len(it.candidates),
             named_person=it.named_person,
             conflict=it.state == "conflict",
-            stated=it.stated,
             model_would_ask=it.model_would_ask,
             has_value=bool(it.value),
         )
@@ -262,8 +300,6 @@ class Session:
             it.pending = True
             if not conflict:
                 it.state = "open"
-        elif d.way == "read a file":
-            it.state, it.source = "confirmed", "file"
         elif d.way == "guess and mark it":
             it.state, it.source = "assumed", "guess"
             if conflict:
@@ -429,7 +465,7 @@ class Session:
 
     # ------------------------------------------------------------ trace
 
-    def _log(self, it: Item, event: str, value, outcome: str | None = None) -> dict:
+    def _log(self, it: Item, event: str, value, outcome: str | None = None, waste: bool | None = None) -> dict:
         return self.trace.write(
             {
                 "time": None,
@@ -445,7 +481,7 @@ class Session:
                 "heading": it.heading,
                 "stated_or_inferred": it.stated_or_inferred,
                 "must_hold_or_nice": it.must_hold_or_nice,
-                "chance_wrong": round(it.chance_wrong, 4),
+                "chance_wrong": round(it.chance_wrong, 4) if it.chance_wrong is not None else None,
                 "can_undo": it.can_undo,
                 "would_notice": it.would_notice,
                 "harm_band": it.harm_band,
@@ -462,6 +498,7 @@ class Session:
                 "running_cost": round(self.running_cost, 4),
                 "limit_reached": self.limit_reached,
                 "outcome": outcome,
+                "waste": waste,
             }
         )
 

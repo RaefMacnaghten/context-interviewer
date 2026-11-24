@@ -1,5 +1,10 @@
 """The gap trace: the tool's own log, one JSON object per line.
 
+"way" records how each item was handled overall: read a file (first look),
+read a file (second look), ask, guess and mark it, wait, or cannot be done.
+"outcome" and "waste" are filled in by the test: waste is true for a question
+whose answer the folder held.
+
 Every line carries every field below, so any single line can be read on its
 own. The field list follows the plan; `model` and `model_kind` make visible
 whether a run used the real model or the simulated stand-in.
@@ -42,6 +47,7 @@ TRACE_FIELDS = [
     "running_cost",
     "limit_reached",
     "outcome",
+    "waste",
 ]
 
 # What "event" can be. "decided" is the first line for every item.
