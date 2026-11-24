@@ -16,7 +16,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .asktable import AskTable
-from .documents import survey
+from .documents import SURVEY_LIMIT, TooBig, survey
 from .models import ModelError, make_model, scrub
 from .session import REPO_ROOT, Session
 
@@ -52,8 +52,11 @@ def resolve_folder(folder: str) -> Path:
     p = p.resolve()
     # A task folder (materials/ beside intent.txt and the answer sheet) means its materials: the tool must never
     # read the answer sheet.
-    if (p / "materials").is_dir() and (p / "intent.txt").is_file():
-        p = p / "materials"
+    try:
+        if (p / "materials").is_dir() and (p / "intent.txt").is_file():
+            p = p / "materials"
+    except OSError:  # a folder that cannot be opened is not a task folder; reading it gives a plain message
+        pass
     return p
 
 
@@ -63,11 +66,23 @@ def folder_tree(folder: str) -> dict:
         return {"ok": False, "message": "Choose a folder."}
     p = resolve_folder(folder.strip())
     shown = str(p.relative_to(REPO_ROOT)) if p.is_relative_to(REPO_ROOT) else str(p)
-    if not p.exists():
+    try:
+        exists, is_dir = p.exists(), p.is_dir()
+        if is_dir:
+            next(p.iterdir(), None)
+    except OSError:
+        return {"ok": False, "folder": shown, "message": "This folder cannot be opened."}
+    if not exists:
         return {"ok": False, "folder": shown, "message": f"There is no folder at {folder.strip()}."}
-    if not p.is_dir():
+    if not is_dir:
         return {"ok": False, "folder": shown, "message": f"{folder.strip()} is a file, not a folder."}
-    data = survey(p)
+    try:
+        data = survey(p)
+    except TooBig:
+        return {"ok": False, "folder": shown,
+                "message": f"This folder holds more than {SURVEY_LIMIT} files and folders. Choose a smaller folder."}
+    except OSError:
+        return {"ok": False, "folder": shown, "message": "This folder cannot be opened."}
     data.update(ok=True, folder=shown)
     if data["files"] == 0:
         data.update(ok=False, message="This folder is empty. There is nothing to read.")
@@ -185,6 +200,9 @@ class Handler(BaseHTTPRequestHandler):
         if not s:
             return self._error("no such session", HTTPStatus.NOT_FOUND)
         action = parts[3]
+        if s.status != "ready":
+            return self._error("Reading the folder has not finished yet." if s.status == "reading"
+                               else "Reading the folder failed, so there is nothing to answer.", HTTPStatus.CONFLICT)
         try:
             with LOCK:
                 if action == "reply":

@@ -86,3 +86,60 @@ def test_stopping_at_the_limit_leaves_a_clash_open(tmp_path):
     s.limit_choice("stop")
     clash = next(it for it in s.items if it.sources)
     assert clash.state == "conflict" and clash.way == "wait" and "never guessed" in clash.reason
+
+
+def test_intent_clash_is_left_open_under_never_ask(tmp_path):
+    intent = "Draft the rota and show it to me first. Do not send it to anyone."
+    s = Session(ROTA, intent, SimulatedModel.for_folder(ROTA), rule="never-ask", runs_dir=tmp_path).start()
+    goal = s.items[0]
+    assert goal.state == "conflict" and goal.way == "wait" and not goal.pending
+    assert s.current_question() is None
+    assert "never-ask rule asks nothing" in goal.reason
+
+
+def test_scrub_hides_quoted_headers_and_the_key_itself(monkeypatch):
+    from elicitagent.models import scrub
+
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "proxykey-ABCDEF123456")
+    out = scrub("{'Authorization': 'Bearer tok_ABCDEF123', \"x-api-key\": \"zz\"} key=proxykey-ABCDEF123456")
+    assert "tok_ABCDEF123" not in out and "zz" not in out and "proxykey-ABCDEF123456" not in out
+
+
+def test_tree_does_not_follow_folder_links_and_matches_what_is_read(tmp_path):
+    from elicitagent.documents import read_folder, survey
+
+    (tmp_path / "sub").mkdir()
+    (tmp_path / "a.txt").write_text("one")
+    (tmp_path / "sub" / "b.txt").write_text("two")
+    (tmp_path / "link").symlink_to(tmp_path / "sub")
+    (tmp_path / "sub" / "back").symlink_to(tmp_path)
+    t = survey(tmp_path)
+    assert t["to_read"] == len(read_folder(tmp_path).documents) == 2
+
+
+def test_tree_refuses_a_folder_too_big_to_walk(tmp_path, monkeypatch):
+    import elicitagent.documents as documents
+    from elicitagent.server import folder_tree
+
+    monkeypatch.setattr(documents, "SURVEY_LIMIT", 3)
+    for i in range(5):
+        (tmp_path / f"f{i}.txt").write_text("x")
+    t = folder_tree(str(tmp_path))
+    assert not t["ok"] and "more than" in t["message"]
+
+
+def test_tree_says_plainly_when_a_folder_cannot_be_opened(tmp_path):
+    import os
+
+    from elicitagent.server import folder_tree
+
+    locked = tmp_path / "locked"
+    locked.mkdir()
+    os.chmod(locked, 0)
+    try:
+        if os.access(locked, os.R_OK):
+            pytest.skip("running as a user who can open any folder")
+        t = folder_tree(str(locked))
+        assert not t["ok"] and t["message"] == "This folder cannot be opened."
+    finally:
+        os.chmod(locked, 0o700)

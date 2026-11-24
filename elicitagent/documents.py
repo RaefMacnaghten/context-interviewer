@@ -98,7 +98,15 @@ def examine(file: Path, root: Path) -> Document | Skipped | None:
 
 
 def _files(root: Path) -> list[Path]:
+    """Every file under root, as the reader walks it: symlinked folders are not followed."""
     return sorted(p for p in root.rglob("*") if p.is_file())
+
+
+SURVEY_LIMIT = 2000  # entries; a bigger folder is not walked, so a half-typed path such as "/" cannot walk a disk
+
+
+class TooBig(Exception):
+    pass
 
 
 def read_folder(path: str | Path, on_file=None) -> Folder:
@@ -110,7 +118,10 @@ def read_folder(path: str | Path, on_file=None) -> Folder:
     folder = Folder(path=root)
     files = [f for f in _files(root) if not any(part.startswith(".") for part in f.relative_to(root).parts)]
     for n, file in enumerate(files, 1):
-        outcome = examine(file, root)
+        try:
+            outcome = examine(file, root)
+        except OSError:
+            outcome = Skipped(file.relative_to(root).as_posix(), "cannot be opened")
         if isinstance(outcome, Document):
             folder.documents.append(outcome)
         elif isinstance(outcome, Skipped):
@@ -124,21 +135,37 @@ def survey(path: str | Path) -> dict:
     """The folder as a tree, before anything is read by the model: every file and sub-folder, and for each file
     whether the reader will read it or skip it, and why. Hidden files are listed as skipped."""
     root = Path(path).resolve()
+    seen = [0]
 
     def node(d: Path) -> dict:
         children = []
-        for p in sorted(d.iterdir(), key=lambda x: (x.is_file(), x.name.lower())):
+        try:
+            entries = sorted(d.iterdir(), key=lambda x: (x.is_file(), x.name.lower()))
+        except OSError:
+            return {"name": d.name, "path": d.relative_to(root).as_posix() if d != root else "", "type": "dir",
+                    "children": [], "read": False, "reason": "cannot be opened"}
+        for p in entries:
+            seen[0] += 1
+            if seen[0] > SURVEY_LIMIT:
+                raise TooBig
             rel = p.relative_to(root).as_posix()
             hidden = p.name.startswith(".")
-            if p.is_dir():
+            if p.is_symlink() and p.is_dir():  # the reader does not follow symlinked folders, so neither does the tree
+                children.append({"name": p.name, "path": rel, "type": "dir", "children": [], "read": False,
+                                 "reason": "link to another folder, not read"})
+            elif p.is_dir():
                 if hidden:  # not opened: the reader never looks inside a hidden folder
                     children.append({"name": p.name, "path": rel, "type": "dir", "children": [], "read": False,
                                      "reason": "hidden folder, not read"})
                 else:
                     children.append(node(p))
             elif p.is_file():
-                outcome = None if hidden else examine(p, root)
-                entry = {"name": p.name, "path": rel, "type": "file", "kind": type_name(p), "bytes": p.stat().st_size}
+                try:
+                    outcome = None if hidden else examine(p, root)
+                    size = p.stat().st_size
+                except OSError:
+                    outcome, size = Skipped(rel, "cannot be opened"), 0
+                entry = {"name": p.name, "path": rel, "type": "file", "kind": type_name(p), "bytes": size}
                 if isinstance(outcome, Document):
                     entry.update(read=True, reason=None, kind="PDF with text" if outcome.kind == "pdf" else entry["kind"])
                 else:

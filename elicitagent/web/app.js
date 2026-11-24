@@ -191,13 +191,18 @@ async function start(ev) {
 let lastStart = null;
 let pollTimer = null;
 let viewAt = 0;
+let pollMisses = 0;
 async function poll() {
   clearTimeout(pollTimer);
   try {
     view = await api(`/api/session/${view.id}`);
     viewAt = Date.now();
+    pollMisses = 0;
   } catch (e) {
-    view = { ...view, status: "failed", error: `Lost contact with the tool: ${e.message}` };
+    // the reading goes on in the tool; one missed answer is not a failure. Give up after about 15 seconds.
+    if (++pollMisses < 10) { pollTimer = setTimeout(poll, 1500); return; }
+    pollMisses = 0;
+    view = { ...view, status: "failed", error: `Lost contact with the tool: ${e.message}. It may still be reading; reload the page to look again.` };
   }
   render();
   if (view.status === "reading") pollTimer = setTimeout(poll, 500);

@@ -78,10 +78,10 @@ class AskTable:
 
     # P5
     def question_kind(self, candidates: int, named_person: bool, conflict: bool) -> str:
+        if conflict:  # P11: a clash shows both sides, even about a named person
+            return "choose"
         if named_person and self.named_person.get("always_open", True):
             return "open"
-        if conflict:
-            return "choose"
         if candidates == 1:
             return "confirm"
         if self.kinds["choose_min_candidates"] <= candidates <= self.kinds["choose_max_candidates"]:

@@ -239,6 +239,8 @@ class Session:
     def _done(self, key: str, summary: str) -> None:
         step = self._step(key)
         step.update(state="done", ended=time.time(), summary=summary, detail="")
+        if self.progress.get("current") == key:
+            self.progress["current"] = None
 
     def _on_file(self, name: str, n: int, of: int, outcome) -> None:
         from .documents import Document
@@ -276,10 +278,10 @@ class Session:
             label = next((st["label"] for st in self.progress.get("steps", []) if st["key"] == current), "reading")
             self.error = scrub(f"Something went wrong at the step \"{label}\". "
                                f"The technical reason: {exc.__class__.__name__}: {exc}.")
-        self.status = "failed"
         current = self.progress.get("current")
         if current:
             self._step(current, state="failed")
+        self.status = "failed"  # last, so a page that sees "failed" also sees which step failed
         return self
 
     # ------------------------------------------------------------ start
@@ -401,9 +403,15 @@ class Session:
             g.value, g.state, g.stated, g.must_hold, g.named_person = self.intent, "conflict", False, True, False
             g.document = g.passage = None
             g.passage_found = False
-            g.way, g.kind, g.cost, g.pending, g.ask_first = "ask", "choose", self.table.cost["choose"], True, True
-            g.reason = ("Asked first: what you typed and the folder disagree about the goal. Your intent never goes "
-                        "to the ask table, so you choose." + (f" {same}" if same else ""))
+            g.kind, g.cost, g.ask_first = "choose", self.table.cost["choose"], True
+            if self.rule == "never-ask":  # the test rule asks nothing; a clash is never guessed, so it stays open
+                g.way, g.pending = "wait", False
+                g.reason = ("Left open: what you typed and the folder disagree about the goal, a clash is never "
+                            "guessed, and the never-ask rule asks nothing." + (f" {same}" if same else ""))
+            else:
+                g.way, g.pending = "ask", True
+                g.reason = ("Asked first: what you typed and the folder disagree about the goal. Your intent never "
+                            "goes to the ask table, so you choose." + (f" {same}" if same else ""))
             return [g] + rest
         said = Item(
             id=INTENT_ID, heading=GOAL_HEADING, key=GOAL_KEY, label=GOAL_LABEL, value=self.intent,

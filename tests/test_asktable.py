@@ -61,7 +61,7 @@ def test_harm_bands(table, can_undo, would_notice, band, harm):
         (0, False, False, "open", 2),
         (1, False, True, "choose", 1),  # a clash is a choose
         (1, True, False, "open", 2),  # a named person is always open
-        (3, True, True, "open", 2),
+        (3, True, True, "choose", 1),  # a clash about a named person still shows both sides (P11)
     ],
 )
 def test_question_kinds(table, candidates, named, conflict, kind, cost):

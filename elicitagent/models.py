@@ -37,8 +37,13 @@ class ModelError(RuntimeError):
 
 def scrub(text: str) -> str:
     """Error text shown to the person: never a key, and never a request header."""
-    text = re.sub(r"sk-[A-Za-z0-9_\-]{6,}", "[hidden]", str(text))
-    return re.sub(r"(?i)(x-api-key|authorization)\s*[:=]\s*[^\n,;]+", r"\1: [hidden]", text)
+    text = str(text)
+    for name in ("ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"):
+        secret = os.environ.get(name, "").strip()
+        if len(secret) >= 8:
+            text = text.replace(secret, "[hidden]")
+    text = re.sub(r"sk-[A-Za-z0-9_\-]{6,}", "[hidden]", text)
+    return re.sub(r"(?i)([\"']?(?:x-api-key|authorization)[\"']?)\s*[:=]\s*[^\n,;}]+", r"\1: [hidden]", text)
 
 
 def complete_objects(buf: str, key: str) -> list[dict]:
