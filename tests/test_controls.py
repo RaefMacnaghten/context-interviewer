@@ -82,3 +82,20 @@ def test_end_screen_who_can_supply_is_traced_and_in_the_brief(s):
     assert "Hall alarm code" in cannot and "the hall caretaker" in cannot
     ask_first = text.split("## Ask first")[1].split("## Cannot be done")[0]
     assert "Kit Inventa" in ask_first  # skipped, so still waiting
+
+
+def test_why_is_read_from_the_gap_trace(s):
+    q = s.current_question()
+    why = s.why(q.id)
+    d = why["decided"]
+    assert d["event"] == "decided" and d["item"] == q.id
+    assert d["chance_wrong"] == round(q.chance_wrong, 4) and d["question_cost"] == q.cost
+    assert why["rule_test"] and why["threshold_name"] == "k"
+
+
+def test_source_context_is_given_for_items_and_clash_sources(s):
+    v = s.view()
+    item = next(i for i in v["items"] if i["passage"])
+    assert item["context"] and item["context"]["match"]
+    clash = next(i for i in v["items"] if i["sources"])
+    assert all(src["context"] for src in clash["sources"])

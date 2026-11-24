@@ -473,7 +473,27 @@ class Session:
         d["must_hold_or_nice"] = it.must_hold_or_nice
         doc = self.folder.get(it.document) if (self.folder and it.document) else None
         d["context"] = passage_context(doc, it.passage)
+        for src in d["sources"]:
+            sdoc = self.folder.get(src["document"]) if self.folder else None
+            src["context"] = passage_context(sdoc, src["passage"])
         return d
+
+    def why(self, item_id: str) -> dict:
+        """Stage 7: the read-only working for one item, read from its gap-trace lines."""
+        it = self.get(item_id)
+        lines = [line for line in self.trace.lines if line["item"] == it.id]
+        decided = next((line for line in reversed(lines) if line["event"] == "decided"), None)
+        rule = self.table.rules[self.rule]
+        return {
+            "item": it.id,
+            "label": it.label,
+            "decided": decided,
+            "history": [{"event": l["event"], "value": l["value"], "time": l["time"], "question_count": l["question_count"],
+                         "running_cost": l["running_cost"]} for l in lines if l["event"] != "decided"],
+            "rule_label": rule.get("label", self.rule),
+            "rule_test": rule.get("test", ""),
+            "threshold_name": rule.get("threshold_name"),
+        }
 
     def view(self) -> dict:
         q = self.current_question()

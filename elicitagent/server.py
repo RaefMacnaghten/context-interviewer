@@ -106,6 +106,11 @@ class Handler(BaseHTTPRequestHandler):
             s = self._session(parts[2]) if len(parts) >= 3 else None
             if not s:
                 return self._error("no such session", HTTPStatus.NOT_FOUND)
+            if len(parts) == 5 and parts[3] == "why":
+                try:
+                    return self._send_json(s.why(parts[4]))
+                except KeyError:
+                    return self._error("no such item", HTTPStatus.NOT_FOUND)
             if len(parts) == 4 and parts[3] in ("brief.md", "gap-trace.jsonl"):
                 target = s.brief_path if parts[3] == "brief.md" else s.trace.path
                 if not target or not target.is_file():

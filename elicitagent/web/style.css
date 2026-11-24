@@ -170,3 +170,24 @@ a.button:hover { background: #eef3f8; }
 a { color: var(--accent); }
 .review-list a { text-decoration: none; }
 .review-list a:hover { text-decoration: underline; }
+
+/* Stage 7: why this question, and the source passage in place */
+button.why-toggle, button.source-toggle { border: none; background: none; padding: 0; color: var(--accent); font-size: 13px; cursor: pointer; }
+button.why-toggle:hover, button.source-toggle:hover { text-decoration: underline; }
+.why { margin: 8px 0 12px; padding: 10px 12px; background: #f3f6fa; border: 1px solid #d9e3ee; border-radius: 8px; font-size: 13px; }
+.why-title { font-weight: 600; margin: 0 0 6px; }
+.why-list { display: grid; grid-template-columns: max-content 1fr; gap: 2px 12px; margin: 0 0 8px; }
+.why-list dt { color: var(--muted); }
+.why-list dd { margin: 0; }
+.why-working { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; margin: 4px 0; }
+.why-reason { margin: 4px 0; }
+.source { margin: 4px 0 6px; font-size: 13px; }
+.source-quote { color: var(--muted); font-size: 12px; }
+.source-context { margin-top: 4px; border: 1px solid var(--line); border-radius: 6px; background: #fbfaf7; padding: 6px 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; overflow-x: auto; }
+.ctx { padding: 1px 10px; white-space: pre-wrap; word-break: break-word; color: var(--muted); }
+.ctx.hit { background: var(--highlight); color: var(--ink); }
+.ctx .ln { display: inline-block; min-width: 2.5em; color: #b0aea6; user-select: none; }
+.clash-sources { margin-bottom: 6px; }
+.ctx { display: flex; gap: 6px; }
+.ctx .ln { flex: 0 0 2.2em; text-align: right; }
+.items-list .source { margin: 2px 0 0; }

@@ -4,6 +4,8 @@ const $ = (sel) => document.querySelector(sel);
 let config = null;
 let view = null;
 let editing = null; // id of the item being edited
+let whyOpen = false; // the "why this question" panel
+const openSources = new Set(); // item ids whose source passage is expanded
 
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -102,6 +104,7 @@ async function start(ev) {
 
 async function reply(action, value, who) {
   const q = view.question;
+  whyOpen = false;
   try {
     view = await api(`/api/session/${view.id}/reply`, { item: q.item, action, value, who });
   } catch (e) {
@@ -109,6 +112,68 @@ async function reply(action, value, who) {
     return;
   }
   render();
+}
+
+// Stage 7: the source passage expands in place with a few lines of context, highlighted. No file viewer.
+function sourceView(key, documentName, passage, context, compact = false) {
+  if (!documentName || !passage) return null;
+  const open = openSources.has(key);
+  const toggle = el("button", { class: "source-toggle", "aria-expanded": open ? "true" : "false",
+    onclick: () => { open ? openSources.delete(key) : openSources.add(key); render(); } },
+    `${open ? "Hide" : "Show"} source: ${documentName}`);
+  const wrap = el("div", { class: "source" }, toggle);
+  if (!open) {
+    if (!compact) wrap.append(el("div", { class: "source-quote" }, `"${passage}"`));
+    return wrap;
+  }
+  const box = el("div", { class: "source-context" });
+  if (context) {
+    const n0 = context.line - context.before.length;
+    context.before.forEach((l, i) => box.append(el("div", { class: "ctx" }, el("span", { class: "ln" }, n0 + i), el("span", {}, l))));
+    context.match.forEach((l, i) => box.append(el("div", { class: "ctx hit" }, el("span", { class: "ln" }, context.line + i), el("span", {}, l))));
+    context.after.forEach((l, i) => box.append(el("div", { class: "ctx" }, el("span", { class: "ln" }, context.line + context.match.length + i), el("span", {}, l))));
+  } else {
+    box.append(el("div", { class: "ctx hit" }, passage));
+  }
+  wrap.append(box);
+  return wrap;
+}
+
+function pct(p) { return `${Math.round(p * 100)}%`; }
+function yn(b) { return b ? "yes" : "no"; }
+function num(x) { return Math.round(x * 1000) / 1000; }
+
+async function renderWhy(container, itemId) {
+  let data;
+  try {
+    data = await api(`/api/session/${view.id}/why/${itemId}`);
+  } catch (e) {
+    container.replaceChildren(el("p", { class: "error" }, e.message));
+    return;
+  }
+  const d = data.decided;
+  const rows = [
+    ["Chance a guess is wrong", `${pct(d.chance_wrong)} (the model's estimate)`],
+    ["Could a mistake be undone?", `${yn(d.can_undo)} (the model's answer)`],
+    ["Would you notice a mistake?", `${yn(d.would_notice)} (the model's answer)`],
+    ["Harm if wrong", `${d.harm_band} (${d.harm})`],
+    ["Kind of question", `${d.question_kind}, cost ${d.question_cost}`],
+    ["Rule", `${data.rule_label}${d.threshold !== null ? `, ${data.threshold_name} = ${d.threshold}` : ""}: ${data.rule_test}`],
+  ];
+  let working = null;
+  if (d.rule === "cost-weighted") {
+    const lhs = num(d.chance_wrong * d.harm), rhs = num(d.threshold * d.question_cost);
+    working = `${num(d.chance_wrong)} x ${d.harm} = ${lhs}, against ${d.threshold} x ${d.question_cost} = ${rhs}: ${lhs >= rhs - 1e-9 ? "at least as big, so ask" : "smaller, so do not ask"}.`;
+  } else if (d.rule === "confidence-only") {
+    working = `${num(d.chance_wrong)} against ${d.threshold}: ${d.chance_wrong >= d.threshold - 1e-9 ? "at or above, so ask" : "below, so do not ask"}.`;
+  }
+  container.replaceChildren(
+    el("p", { class: "why-title" }, "Why this question (read-only, from the gap trace)"),
+    el("dl", { class: "why-list" }, rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)])),
+    working ? el("p", { class: "why-working" }, working) : null,
+    el("p", { class: "why-reason" }, d.reason),
+    el("p", { class: "muted small-note" }, `Order of value: (chance wrong x harm) / cost = ${num(d.chance_wrong * d.harm / d.question_cost)}. Higher comes first.`),
+  );
 }
 
 async function control(itemId, action, value) {
@@ -283,7 +348,7 @@ function renderQuestion() {
     for (const src of q.sources) {
       clash.append(el("button", { class: "clash-option", onclick: () => reply("answer", src.value) },
         el("span", { class: "clash-value" }, src.value),
-        el("span", { class: "clash-source" }, `${src.document}: "${src.passage}"`)));
+        el("span", { class: "clash-source" }, `from ${src.document}`)));
     }
   } else if (q.kind === "choose") {
     for (const c of q.candidates) replies.append(el("button", { onclick: () => reply("answer", c) }, c));
@@ -295,8 +360,12 @@ function renderQuestion() {
     el("p", { class: "cost" }, `Question ${view.question_count + 1} · ${q.kind} question · costs ${q.cost}`),
     el("p", { class: "question-text" }, q.text),
     el("p", { class: "reason" }, q.reason),
-    item && item.passage ? el("p", { class: "item-meta" }, `From ${item.document}: "${item.passage}"`) : null,
+    el("button", { class: "why-toggle", "aria-expanded": whyOpen ? "true" : "false", onclick: () => { whyOpen = !whyOpen; render(); } },
+      whyOpen ? "Hide why" : "Why this question?"),
+    whyOpen ? (() => { const box = el("div", { class: "why" }, el("p", { class: "muted" }, "Loading...")); renderWhy(box, q.item); return box; })() : null,
+    item ? sourceView(`q-${item.id}`, item.document, item.passage, item.context) : null,
     clash,
+    clash && item ? el("div", { class: "clash-sources" }, item.sources.map((src, i) => sourceView(`q-${item.id}-${i}`, src.document, src.passage, src.context))) : null,
     replies,
     el("div", { class: "nobody" },
       el("button", { onclick: () => reply("nobody can answer", null, whoBox.value) }, "Nobody can answer this"),
@@ -328,6 +397,8 @@ function renderItems() {
           el("div", { class: "item-meta" }, `${it.stated_or_inferred} · ${it.must_hold_or_nice} · ${it.way}${it.document ? " · " + it.document : ""}${it.who_can_supply ? " · who can supply it: " + it.who_can_supply : ""}${it.source === "person" ? " · settled by you" : ""}`),
           it.sources && it.sources.length ? el("div", { class: "item-meta clash-note" },
             "Documents disagree: " + it.sources.map((src) => `${src.value} (${src.document})`).join(" vs ")) : null,
+          it.passage ? sourceView(`i-${it.id}`, it.document, it.passage, it.context, true) : null,
+          ...(it.sources || []).map((src, n) => sourceView(`i-${it.id}-${n}`, src.document, src.passage, src.context, true)),
           editing === it.id ? editBox(it) : null,
         ),
         editing === it.id ? null : itemControls(it),
