@@ -106,6 +106,18 @@ class Handler(BaseHTTPRequestHandler):
             s = self._session(parts[2]) if len(parts) >= 3 else None
             if not s:
                 return self._error("no such session", HTTPStatus.NOT_FOUND)
+            if len(parts) == 4 and parts[3] in ("brief.md", "gap-trace.jsonl"):
+                target = s.brief_path if parts[3] == "brief.md" else s.trace.path
+                if not target or not target.is_file():
+                    return self._error("not written yet", HTTPStatus.NOT_FOUND)
+                body = target.read_bytes()
+                self.send_response(HTTPStatus.OK)
+                self.send_header("Content-Type", "text/markdown; charset=utf-8" if parts[3] == "brief.md" else "application/x-ndjson; charset=utf-8")
+                self.send_header("Content-Disposition", f'attachment; filename="{s.task}-run-{s.run}-{parts[3]}"')
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+                return None
             return self._send_json(s.view())
         return self._static(path)
 

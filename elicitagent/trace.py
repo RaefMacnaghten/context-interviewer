@@ -54,6 +54,7 @@ EVENTS = [
     "edit",
     "reject",
     "restore",
+    "who can supply",
     "limit reached",
     "continue",
     "stop",

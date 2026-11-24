@@ -162,6 +162,52 @@ function render() {
   if (current) current.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
+// P10: one end screen. Review everything once, see what waits, then write the brief.
+function renderEndScreen(pane) {
+  const live = view.items.filter((i) => !i.rejected);
+  const waiting = live.filter((i) => i.state === "open" || i.state === "conflict");
+  const assumed = live.filter((i) => i.state === "assumed");
+  const cannot = live.filter((i) => i.state === "cannot be done");
+  const section = (title, note, items, extra) => items.length ? el("div", { class: "review-section" },
+    el("h3", {}, `${title} (${items.length})`),
+    el("p", { class: "muted small-note" }, note),
+    el("ul", { class: "review-list" }, items.map((it) => el("li", {},
+      el("a", { href: `#item-${it.id}`, onclick: (ev) => { ev.preventDefault(); document.getElementById(`item-${it.id}`).scrollIntoView({ block: "center", behavior: "smooth" }); } }, it.label),
+      it.value && it.state === "assumed" ? el("span", { class: "muted" }, `: ${it.value}`) : null,
+      extra ? extra(it) : null)))) : null;
+  pane.append(...[
+    el("h2", {}, "Review before the brief is written"),
+    el("p", { class: "muted" }, `No more questions. Asked ${view.question_count}, question cost ${view.running_cost}. Check the brief on the right once: confirm, edit or reject anything. Then write it.`),
+    section("Waiting", "Not settled. The brief passes these to the agent as \"ask before you do this\".", waiting),
+    section("Guessed and marked", "The tool guessed these. Confirm or edit any you can.", assumed),
+    section("Cannot be done", "Nobody here can supply these. Say who needs to.", cannot, (it) => {
+      const box = el("input", { type: "text", value: it.who_can_supply || "", placeholder: "Who needs to supply it?", "aria-label": `Who needs to supply ${it.label}` });
+      box.addEventListener("change", () => control(it.id, "who can supply", box.value));
+      return box;
+    }),
+    el("button", { class: "primary", onclick: finish }, "Write the brief"),
+  ].filter(Boolean));
+}
+
+// A very small Markdown view for the brief: headings, lists, bold, italics, quotes. Text is escaped first.
+function briefHtml(md) {
+  const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|\s)_(.+?)_(?=\s|$|[.,;])/g, "$1<em>$2</em>");
+  const out = [];
+  let inList = false;
+  for (const line of md.split("\n")) {
+    const li = line.match(/^- (.*)$/);
+    if (li) { if (!inList) { out.push("<ul>"); inList = true; } out.push(`<li>${inline(li[1])}</li>`); continue; }
+    if (inList) { out.push("</ul>"); inList = false; }
+    if (line.startsWith("# ")) out.push(`<h2>${inline(line.slice(2))}</h2>`);
+    else if (line.startsWith("## ")) out.push(`<h3>${inline(line.slice(3))}</h3>`);
+    else if (line.startsWith("> ")) out.push(`<blockquote>${inline(line.slice(2))}</blockquote>`);
+    else if (line.trim()) out.push(`<p>${inline(line)}</p>`);
+  }
+  if (inList) out.push("</ul>");
+  return out.join("\n");
+}
+
 function renderProgress() {
   const counts = {};
   for (const it of view.items) counts[it.state] = (counts[it.state] || 0) + 1;
@@ -178,16 +224,19 @@ function renderQuestion() {
   const pane = $("#question-pane");
   pane.replaceChildren();
   if (view.finished) {
-    pane.append(el("h2", {}, "The brief is written"), el("p", { class: "muted" }, `Saved in ${view.run_dir}.`));
+    pane.append(
+      el("h2", {}, "The brief is written"),
+      el("p", { class: "muted" }, `Saved in ${view.run_dir}.`),
+      el("div", { class: "downloads" },
+        el("a", { class: "button", href: `/api/session/${view.id}/brief.md` }, "Download the brief"),
+        el("a", { class: "button", href: `/api/session/${view.id}/gap-trace.jsonl` }, "Download the gap trace")),
+      el("p", {}, el("a", { href: "/" , onclick: () => { location.hash = ""; } }, "Start another")),
+    );
     return;
   }
   const q = view.question;
   if (!q) {
-    pane.append(
-      el("h2", {}, "No more questions"),
-      el("p", { class: "muted" }, `Questions asked: ${view.question_count}, question cost ${view.running_cost}.`),
-      el("button", { class: "primary", onclick: finish }, "Write the brief"),
-    );
+    renderEndScreen(pane);
     return;
   }
   const item = view.items.find((i) => i.id === q.item);
@@ -260,8 +309,11 @@ function renderItems() {
 function renderBrief() {
   const pane = $("#brief-pane");
   pane.hidden = !view.brief;
+  $("#items-pane").hidden = Boolean(view.brief);
   if (!view.brief) return;
-  pane.replaceChildren(el("h2", {}, "Brief"), el("pre", { class: "brief" }, view.brief));
+  const body = el("div", { class: "brief-view" });
+  body.innerHTML = briefHtml(view.brief); // escaped in briefHtml
+  pane.replaceChildren(body);
 }
 
 init().catch((e) => {

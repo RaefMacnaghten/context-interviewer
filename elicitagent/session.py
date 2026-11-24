@@ -335,6 +335,11 @@ class Session:
         elif action == "reject":
             it.rejected = True
             logged = None
+        elif action == "who can supply":
+            if it.state != "cannot be done":
+                raise ValueError("only a 'cannot be done' item has someone who needs to supply it")
+            it.who_can_supply = (value or "").strip() or None
+            logged = it.who_can_supply
         elif action == "restore":
             if not it.rejected:
                 raise ValueError("the item is not rejected")

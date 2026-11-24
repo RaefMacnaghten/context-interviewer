@@ -149,3 +149,24 @@ button.mini { font-size: 12px; padding: 2px 8px; border-radius: 6px; }
 .items-list li.rejected .item-label, .items-list li.rejected .item-value { text-decoration: line-through; color: var(--muted); }
 .items-list li.rejected .state { background: #9a9890; }
 @media (hover: none) { .controls { opacity: 1; } }
+
+/* Stage 5: the end screen and the brief */
+.review-section { margin: 12px 0; }
+.review-section h3 { margin: 10px 0 2px; }
+.small-note { font-size: 13px; margin: 0 0 6px; }
+.review-list { margin: 0; padding-left: 18px; }
+.review-list li { margin: 4px 0; }
+.review-list input { margin-top: 4px; padding: 4px 8px; }
+.downloads { display: flex; flex-wrap: wrap; gap: 8px; margin: 8px 0; }
+a.button { display: inline-block; padding: 7px 14px; border-radius: 8px; border: 1px solid var(--accent); color: var(--accent); text-decoration: none; }
+a.button:hover { background: #eef3f8; }
+.brief-view h2 { font-size: 20px; }
+.brief-view h3 { margin-top: 22px; }
+.brief-view ul { padding-left: 20px; }
+.brief-view li { margin: 4px 0; }
+.brief-view blockquote { margin: 10px 0; padding: 8px 12px; border-left: 3px solid var(--sim); background: #fbf3f3; }
+.brief-view em { color: var(--muted); font-size: 13px; }
+.items-list li .state { min-width: 118px; }
+a { color: var(--accent); }
+.review-list a { text-decoration: none; }
+.review-list a:hover { text-decoration: underline; }
