@@ -14,7 +14,7 @@ ROTA = REPO / "tasks" / "rota" / "materials"
 
 @pytest.fixture
 def s(tmp_path):
-    return Session(ROTA, "x", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path).start()
+    return Session(ROTA, "", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path).start()
 
 
 def last(s):

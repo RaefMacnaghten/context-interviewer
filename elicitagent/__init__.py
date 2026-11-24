@@ -17,7 +17,7 @@ ALL_HEADINGS = HEADINGS + [OTHER]
 # then one targeted second look) comes before the ask table; only what is still missing is a gap. The
 # ask table has three outcomes for a gap: ask, guess and mark it, wait. "Not available here" is set only by
 # the person's reply "I can't answer this".
-WAYS = ["read a file (first look)", "read a file (second look)", "ask", "guess and mark it", "wait", "not available here"]
+WAYS = ["said by the person", "read a file (first look)", "read a file (second look)", "ask", "guess and mark it", "wait", "not available here"]
 
 # The five item states (small thing 1).
 STATES = ["confirmed", "assumed", "open", "conflict", "not available here"]

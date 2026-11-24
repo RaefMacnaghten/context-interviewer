@@ -2,7 +2,7 @@
 
 **Status: draft.** Every row below is an AI-drafted suggestion so that the test harness has something to run against. None of it is the author's answer yet. The author edits, deletes or replaces any row, then locks the sheet in a commit (date and file hash) before the rule is finished. Until then this sheet is not the answer sheet and no result from it is a result.
 
-The task: a person hands the volunteer rota for a small music event to an agent. The folder the tool reads is `materials/`. The person's request is in `request.txt`. Everything is invented: the event, the hall and every name.
+The task: a person hands the volunteer rota for a small music event to an agent. The folder the tool reads is `materials/`. The person's intent (what they want the agent to do) is in `intent.txt`. Everything is invented: the event, the hall and every name.
 
 The tool never reads this file. Only the test harness does, to play the person and to mark items.
 

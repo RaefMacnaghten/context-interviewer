@@ -2,7 +2,7 @@
 
 **Status: draft.** This sheet starts from the AI's skeleton for the inbox task. Every row below is an AI-drafted suggestion, added so the shape is visible and the harness could run against it. None of it is the author's answer. The author writes the real rows, then locks the sheet in a commit (date and file hash) before the rule is finished. Until then this sheet is not the answer sheet and no result from it is a result.
 
-The task: a person hands their inbox to a triage agent. The folder the tool reads is `materials/`: a CSV of 40 invented emails and a notes file of the person's rules. The person's request is in `request.txt`. Nothing here comes from a real inbox: every email, address and name is invented, and every address uses an `example.org` style domain.
+The task: a person hands their inbox to a triage agent. The folder the tool reads is `materials/`: a CSV of 40 invented emails and a notes file of the person's rules. The person's intent (what they want the agent to do) is in `intent.txt`. Nothing here comes from a real inbox: every email, address and name is invented, and every address uses an `example.org` style domain.
 
 The tool never reads this file. Only the test harness does, to play the person and to mark items.
 

@@ -32,12 +32,12 @@ def list_tasks() -> list[dict]:
         for task in sorted(TASKS_DIR.iterdir()):
             materials = task / "materials"
             if materials.is_dir():
-                request_file = task / "request.txt"
+                intent_file = task / "intent.txt"
                 out.append(
                     {
                         "name": task.name,
                         "folder": str(materials.relative_to(REPO_ROOT)),
-                        "request": request_file.read_text(encoding="utf-8").strip() if request_file.is_file() else "",
+                        "intent": intent_file.read_text(encoding="utf-8").strip() if intent_file.is_file() else "",
                         "simulated_available": (task / "simulated-model.json").is_file(),
                     }
                 )
@@ -48,7 +48,12 @@ def resolve_folder(folder: str) -> Path:
     p = Path(folder)
     if not p.is_absolute():
         p = REPO_ROOT / p
-    return p.resolve()
+    p = p.resolve()
+    # A task folder (materials/ beside intent.txt and the answer sheet) means its materials: the tool must never
+    # read the answer sheet.
+    if (p / "materials").is_dir() and (p / "intent.txt").is_file():
+        p = p / "materials"
+    return p
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -176,9 +181,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _start(self, body: dict):
         folder = body.get("folder") or ""
-        request = body.get("request") or ""
-        if not folder or not request.strip():
-            return self._error("Choose a folder and say what you want the agent to do.")
+        intent = body.get("intent") or ""  # may be empty: the tool then works out the goal from the folder
+        if not folder:
+            return self._error("Choose a folder.")
         folder_path = resolve_folder(folder)
         if not folder_path.is_dir():
             return self._error(f"Not a folder: {folder}")
@@ -188,7 +193,7 @@ class Handler(BaseHTTPRequestHandler):
             limit = body.get("limit", "default")
             if limit in ("", "none", "off"):
                 limit = None
-            s = Session(folder_path, request, model, rule=body.get("rule") or "cost-weighted",
+            s = Session(folder_path, intent, model, rule=body.get("rule") or "cost-weighted",
                         threshold=float(threshold) if threshold not in (None, "") else None,
                         limit=limit if limit in (None, "default") else float(limit)).start()
         except ModelError as exc:

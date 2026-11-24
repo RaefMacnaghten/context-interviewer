@@ -1,9 +1,12 @@
 {
-  "about": "SIMULATED MODEL. Fixed, plausible responses written by hand for the rota task so the tool and its tests run with no API key. Not the output of a language model. The tool never reads this file as a material.",
+  "about": "SIMULATED MODEL. Fixed, plausible responses written by hand for the rota task so the tool and its tests run with no API key. Not the output of a language model. The tool never reads this file as a material. The stand-in cannot judge meaning: its goal item (s00) agrees only with the intents listed in goal_agrees_with (the task's intent.txt) and counts any other intent as differing.",
   "second_look": {
     "s21": {"value": "no", "document": "roles-and-rules.md", "passage": "Only give people roles they signed up for."}
   },
   "items": [
+    {"id": "s00", "heading": "Goal and deliverable", "key": "goal", "label": "What the agent should do", "value": "Make the volunteer rota for the day and send it to everyone.", "candidates": [], "stated": true, "must_hold": true, "document": "event-plan.md", "passage": "Please make the volunteer rota for the day and send it to everyone.", "about_named_person": false,
+     "goal_agrees_with": ["Make the volunteer rota for the Larkfield Lane Folk Afternoon and send it to everyone."],
+     "estimate": {"chance_wrong": 0.5, "can_undo": false, "would_notice": true, "model_would_ask": true}},
     {"id": "s01", "heading": "Goal and deliverable", "key": "deliverable", "label": "What the agent must produce", "value": "A volunteer rota for the day, shift by shift", "candidates": [], "stated": true, "must_hold": true, "document": "event-plan.md", "passage": "Please make the volunteer rota for the day and send it to everyone.", "about_named_person": false,
      "estimate": {"chance_wrong": 0.1, "can_undo": true, "would_notice": true, "model_would_ask": false}},
     {"id": "s02", "heading": "Goal and deliverable", "key": "rota-format", "label": "Format of the rota", "value": "spreadsheet", "candidates": ["spreadsheet", "PDF"], "stated": false, "must_hold": false, "document": "last-year-notes.txt", "passage": "Most people said the spreadsheet was easier.", "about_named_person": false,

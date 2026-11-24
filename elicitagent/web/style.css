@@ -192,3 +192,14 @@ button.why-toggle:hover, button.source-toggle:hover { text-decoration: underline
 .ctx .ln { flex: 0 0 2.2em; text-align: right; }
 .items-list .source { margin: 2px 0 0; }
 .items-list li .state { min-width: 0; flex: 0 0 136px; }
+.pick { display: grid; grid-template-columns: 1fr 1fr; gap: 0 16px; align-items: stretch; }
+.pick { margin-bottom: 10px; }
+.pick-folder { display: flex; flex-direction: column; }
+form .pick label { margin: 10px 0 0; }
+form label.pick-intent { display: flex; flex-direction: column; }
+.pick-intent textarea { flex: 1 1 0; min-height: 56px; resize: vertical; }
+form label .hint { display: block; font-weight: 400; color: var(--muted); margin-top: 2px; }
+@media (max-width: 640px) { .pick { grid-template-columns: 1fr; } .pick-intent textarea { flex: none; min-height: 96px; } }
+input[type=text], select { height: 38px; }
+form .row > label { margin: 10px 0 0; }
+form .row { margin-bottom: 10px; }

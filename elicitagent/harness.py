@@ -21,7 +21,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from .models import make_model
-from .session import Item, Session
+from .session import SAID, Item, Session
 
 STOP = {
     "the", "a", "an", "of", "to", "for", "on", "in", "is", "be", "by", "and", "or", "it", "its", "at", "with",
@@ -119,6 +119,8 @@ def person_reply(it: Item, row: SheetRow | None) -> tuple[str, str | None, str |
 
 
 def mark(it: Item, row: SheetRow | None) -> str:
+    if it.way == SAID:
+        return "said by the person"  # the intent the script typed in: nothing to mark
     if row is None:
         return "no answer-sheet row"
     if it.state == "not available here":
@@ -144,12 +146,14 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
             sheet: str | None = None, runs_dir: str | None = None) -> int:
     task_dir = Path(task).resolve()
     materials = task_dir / "materials"
-    request = (task_dir / "request.txt").read_text(encoding="utf-8").strip()
+    # The script playing the person supplies the intent from the task folder, so runs stay comparable.
+    intent_file = task_dir / "intent.txt"
+    intent = intent_file.read_text(encoding="utf-8").strip() if intent_file.is_file() else ""
     sheet_path = Path(sheet) if sheet else find_sheet(task_dir)
     rows = parse_sheet(sheet_path)
     model = make_model(model_choice, materials)
     # P9: the question limit is switched off in the test.
-    session = Session(materials, request, model, rule=rule, threshold=threshold, runs_dir=runs_dir, limit=None).start()
+    session = Session(materials, intent, model, rule=rule, threshold=threshold, runs_dir=runs_dir, limit=None).start()
 
     asked = []
     while (it := session.current_question()) is not None:
@@ -162,7 +166,7 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
     outcomes = {}
     matched_rows = set()
     for it in session.items:
-        row = match_row(it, rows)
+        row = None if it.way == SAID else match_row(it, rows)
         if row:
             matched_rows.add(row.id)
         outcome = mark(it, row)
@@ -191,6 +195,7 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
         "silent_wrong_guesses": silent_wrong,
         "wasted_questions": len(wasted),
         "wasted_question_cost": sum(it.cost for it in wasted),
+        "intent": intent or None,
         "filled_from_the_folder": {"first look": sum(1 for it in session.items if it.way == "read a file (first look)"),
                                    "second look": sum(1 for it in session.items if it.way == "read a file (second look)")},
         "sheet_rows_not_found_by_the_tool": missed,

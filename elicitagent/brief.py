@@ -11,20 +11,30 @@ if TYPE_CHECKING:
     from .session import Item, Session
 
 
+def _sides(it: "Item") -> str:
+    """The sides of a clash: each value with where it came from (a document, or the person's intent)."""
+    return "; ".join(f'{src["value"]} ' + ("from the person" if src.get("person") else f'in {src["document"]}') for src in it.sources)
+
+
+def _disagree(it: "Item") -> str:
+    return "the person's intent and the folder disagree" if any(src.get("person") for src in it.sources) else "the documents disagree"
+
+
 def _source_note(it: "Item") -> str:
     if it.state == "confirmed" and it.source == "file":
         second = " (found on a second look)" if it.way.endswith("(second look)") else ""
         return f'confirmed, from {it.document}{second}: "{" ".join((it.passage or "").split())}"'
     if it.state == "confirmed" and it.source == "person":
         if it.sources:
-            return "confirmed by the person, where the documents disagreed (" + "; ".join(f'{src["value"]} in {src["document"]}' for src in it.sources) + ")"
+            where = "the person's intent and the folder disagreed" if any(src.get("person") for src in it.sources) else "the documents disagreed"
+            return f"confirmed by the person, where {where} ({_sides(it)})"
         return "confirmed by the person"
     if it.state == "assumed":
         if it.sources:
-            return "assumed: the documents disagree and the tool picked one, check before relying on it"
+            return f"assumed: {_disagree(it)} and the tool picked one, check before relying on it"
         return "assumed: guessed by the tool, check before relying on it"
     if it.state == "conflict":
-        return "conflict: the documents disagree"
+        return f"conflict: {_disagree(it)}"
     if it.state == "not available here":
         return "not available here"
     return "open"
@@ -36,8 +46,9 @@ def write_brief(session: "Session") -> str:
     lines: list[str] = []
     lines.append(f"# Brief for the agent: {session.task}")
     lines.append("")
-    lines.append(f"Request: {session.request}")
-    lines.append("")
+    if not session.intent:
+        lines.append("The person did not say what they want the agent to do; the goal was worked out from the folder.")
+        lines.append("")
     lines.append(
         f"Written by ElicitAgent on {time.strftime('%d %b %Y %H:%M')}. Run {session.run}. Rule: {session.run_label}. "
         f"Questions asked: {session.question_count}, question cost {session.running_cost:g}."
@@ -63,7 +74,7 @@ def write_brief(session: "Session") -> str:
         for it in ask_first:
             extra = ""
             if it.state == "conflict" and it.sources:
-                extra = " (the documents disagree: " + "; ".join(f'{src["value"]} in {src["document"]}' for src in it.sources) + ")"
+                extra = f" ({_disagree(it)}: {_sides(it)})"
             lines.append(f"- **{it.label}** ({it.heading}, {it.must_hold_or_nice}){extra}")
     else:
         lines.append("- Nothing.")

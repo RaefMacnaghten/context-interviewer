@@ -21,8 +21,8 @@ PLAN_FIELDS = [
 
 @pytest.fixture
 def session(tmp_path):
-    request = (REPO / "tasks" / "rota" / "request.txt").read_text()
-    return Session(ROTA, request, SimulatedModel.for_folder(ROTA), runs_dir=tmp_path).start()
+    intent = (REPO / "tasks" / "rota" / "intent.txt").read_text()
+    return Session(ROTA, intent, SimulatedModel.for_folder(ROTA), runs_dir=tmp_path).start()
 
 
 def test_trace_has_every_plan_field():
@@ -48,12 +48,12 @@ def test_every_item_gets_a_decided_line_with_all_fields(session):
         assert line["model_kind"] == "simulated"
         assert "simulated" in line["run_label"]
         assert line["rule"] == "cost-weighted" and line["threshold"] == 1
-        assert line["way"] in ("read a file (first look)", "read a file (second look)", "ask", "guess and mark it", "wait")
+        assert line["way"] in ("said by the person", "read a file (first look)", "read a file (second look)", "ask", "guess and mark it", "wait")
 
 
 def test_passages_are_checked_against_the_documents(session):
     for it in session.items:
-        if it.stated:
+        if it.stated and it.way != "said by the person":
             assert it.passage_found and it.document
 
 
@@ -115,7 +115,7 @@ def test_reading_the_folder_comes_before_the_ask_table(session):
         assert it.chance_wrong is None and it.harm_band == "" and it.kind == "" and not it.pending
         assert it.state == "confirmed" and it.source == "file" and it.document and it.passage_found
     for it in session.items:
-        if not it.way.startswith("read a file"):
+        if not it.way.startswith("read a file") and it.way != "said by the person":
             assert it.way in ("ask", "guess and mark it", "wait")
             assert it.chance_wrong is not None
 
@@ -130,7 +130,7 @@ def test_second_look_fills_an_item_the_first_look_missed(session):
 
 
 def test_second_look_hit_is_checked_against_the_document(tmp_path):
-    s = Session(ROTA, "x", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path)
+    s = Session(ROTA, "", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path)
     s.folder = __import__("elicitagent.documents", fromlist=["read_folder"]).read_folder(ROTA)
     assert s._verified({"value": "no", "document": "roles-and-rules.md", "passage": "Only give people roles they signed up for."})
     assert not s._verified({"value": "no", "document": "roles-and-rules.md", "passage": "A line that is not there."})
@@ -156,3 +156,165 @@ def test_not_available_line_with_and_without_a_name(session):
     text = session.finish().read_text()
     assert f"**{named.label}** ({named.heading}). Not available: ask the hall caretaker before acting." in text
     assert f"**{unnamed.label}** ({unnamed.heading}). Not available: find out before acting." in text
+
+
+# ------------------------------------------------------------------ the intent box
+
+
+def test_typed_intent_is_the_first_goal_item_with_the_person_as_source(session):
+    intent = (REPO / "tasks" / "rota" / "intent.txt").read_text().strip()
+    first = session.items[0]
+    assert first.id == "intent" and first.heading == "Goal and deliverable" and first.key == "goal"
+    assert first.value == intent and first.way == "said by the person"
+    assert first.state == "confirmed" and first.source == "person" and first.document is None
+    # confirmed by the person: it never reaches the ask table
+    assert first.chance_wrong is None and first.kind == "" and not first.pending and first.harm_band == ""
+    # the folder's goal agrees (the stand-in was written for this intent), so it is not listed twice
+    assert not any(it.id == "s00" for it in session.items)
+    assert "event-plan.md says the same" in first.reason
+    line = next(l for l in read_trace(session.trace.path) if l["item"] == "intent")
+    assert line["way"] == "said by the person" and line["source_document"] == "the person"
+    assert line["source_passage"] == intent and line["value"] == intent
+    goal = session.finish().read_text().split("## Goal and deliverable")[1].split("## ")[0]
+    assert goal.strip().splitlines()[0] == f"- **What the agent should do**: {intent} _(must hold; confirmed by the person)_"
+
+
+def test_empty_box_works_out_the_goal_from_the_folder(tmp_path):
+    s = Session(ROTA, "   ", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path).start()
+    assert s.intent == ""
+    assert not any(it.id == "intent" or it.way == "said by the person" for it in s.items)
+    goal = next(it for it in s.items if it.key == "goal")
+    assert goal.id == "s00" and goal.way == "read a file (first look)" and goal.document == "event-plan.md"
+    assert goal.agrees_with_intent is None
+    assert "the goal was worked out from the folder" in s.finish().read_text()
+
+
+def test_intent_that_differs_from_the_folders_goal_is_a_clash(tmp_path):
+    intent = "Draft the rota and show it to me first. Do not send it to anyone."
+    s = Session(ROTA, intent, SimulatedModel.for_folder(ROTA), runs_dir=tmp_path).start()
+    goal = s.items[0]
+    assert goal.state == "conflict" and goal.label == "What the agent should do" and goal.key == "goal"
+    assert not any(it.id == "intent" for it in s.items)
+    assert [src["document"] for src in goal.sources] == ["the person", "event-plan.md"]
+    assert goal.sources[0]["person"] and goal.sources[0]["value"] == intent
+    assert goal.sources[1]["passage"] == "Please make the volunteer rota for the day and send it to everyone."
+    assert goal.candidates == [intent, "Make the volunteer rota for the day and send it to everyone."]
+    # the intent never goes to the ask table: the clash is always a choose question, asked first
+    assert goal.way == "ask" and goal.kind == "choose" and goal.pending and goal.chance_wrong is None
+    assert s.current_question() is goal
+    assert "what you typed and the folder disagree" in goal.reason
+    line = next(l for l in read_trace(s.trace.path) if l["item"] == goal.id)
+    assert line["source_document"] == "the person | event-plan.md"
+    while (q := s.current_question()) is not None:
+        s.reply(q.id, "answer", intent) if q is goal else s.reply(q.id, "skip")
+    assert goal.state == "confirmed" and goal.source == "person" and goal.value == intent
+    text = s.finish().read_text()
+    assert f"**What the agent should do**: {intent}" in text
+    assert "where the person's intent and the folder disagreed" in text and f"{intent} from the person" in text
+
+
+def test_intent_left_open_shows_both_sides_in_the_brief(tmp_path):
+    intent = "Draft the rota and show it to me first."
+    s = Session(ROTA, intent, SimulatedModel.for_folder(ROTA), runs_dir=tmp_path).start()
+    ask_first = s.finish().read_text().split("## Ask first")[1].split("## Not available here")[0]
+    assert "**What the agent should do**" in ask_first
+    assert f"the person's intent and the folder disagree: {intent} from the person; " in ask_first
+
+
+def test_the_intent_is_passed_to_every_model_call_as_the_task():
+    from elicitagent.models import LIST_SCHEMA, _intent_block
+
+    assert "<intent>\nMake the rota.\n</intent>" in _intent_block("Make the rota.")
+    assert "did not say" in _intent_block("") and "Work out the goal from the folder" in _intent_block("  ")
+    item = LIST_SCHEMA["properties"]["items"]["items"]
+    assert "agrees_with_intent" in item["required"] and item["properties"]["agrees_with_intent"]["type"] == ["boolean", "null"]
+
+
+def test_the_real_model_receives_the_intent_in_all_three_calls():
+    from elicitagent.documents import read_folder
+    from elicitagent.models import AnthropicModel
+
+    seen = []
+    model = AnthropicModel("claude-test", client=object())
+    replies = iter([{"items": []}, {"results": []}, {"estimates": []}])
+    model._call = lambda system, user, schema: (seen.append(user), next(replies))[1]
+    folder = read_folder(ROTA)
+    model.list_items("Make the rota.", folder)
+    model.second_look("Make the rota.", folder, [{"id": "a", "heading": "Times", "label": "x"}])
+    model.estimate("Make the rota.", folder, [{"id": "a"}])
+    assert len(seen) == 3 and all("<intent>\nMake the rota.\n</intent>" in u for u in seen)
+
+
+def test_edited_intent_keeps_what_the_person_typed_in_the_trace(session):
+    intent = session.intent
+    session.control("intent", "edit", "Make it and email it")
+    line = read_trace(session.trace.path)[-1]
+    assert line["event"] == "edit" and line["value"] == "Make it and email it"
+    assert line["source_document"] == "the person" and line["source_passage"] == intent
+
+
+def _goal(id, doc, passage, agrees):
+    return {"id": id, "heading": "Goal and deliverable", "key": "goal", "label": "What the agent should do",
+            "value": passage, "candidates": [], "stated": True, "must_hold": True, "document": doc,
+            "passage": passage, "about_named_person": False, "agrees_with_intent": agrees}
+
+
+class _GoalModel(SimulatedModel):
+    def __init__(self, goals):
+        super().__init__(ROTA.parent / "simulated-model.json")
+        self.goals = goals
+
+    def list_items(self, intent, folder):
+        return self.goals + [i for i in super().list_items(intent, folder) if i["key"] != "goal"]
+
+
+PLAN = "Please make the volunteer rota for the day and send it to everyone."
+NOTES = "Next year, someone should do the rota earlier."
+
+
+def test_every_folder_goal_is_kept_as_a_side_or_named_in_the_reason(tmp_path):
+    # two documents state a goal: one agrees with the intent, one differs
+    model = _GoalModel([_goal("g1", "event-plan.md", PLAN, True), _goal("g2", "last-year-notes.txt", NOTES, False)])
+    s = Session(ROTA, "Make the rota and send it.", model, runs_dir=tmp_path).start()
+    goal = s.items[0]
+    assert goal.state == "conflict" and [src["document"] for src in goal.sources] == ["the person", "last-year-notes.txt"]
+    assert "event-plan.md says the same" in goal.reason and PLAN in goal.reason
+    assert set(goal.merged_from) == {"intent", "g1", "g2"}
+    assert sum(1 for it in s.items if it.key == "goal") == 1
+
+
+def test_a_document_clash_about_the_goal_keeps_both_documents_with_an_intent(tmp_path):
+    model = _GoalModel([_goal("g1", "event-plan.md", PLAN, True), _goal("g2", "last-year-notes.txt", NOTES, True)])
+    s = Session(ROTA, "Make the rota and send it.", model, runs_dir=tmp_path).start()
+    first = s.items[0]
+    assert first.id == "intent" and first.way == "said by the person"
+    assert "event-plan.md says the same" in first.reason and "last-year-notes.txt says the same" in first.reason
+
+
+def test_a_goal_with_no_answer_on_agreement_counts_as_differing(tmp_path):
+    model = _GoalModel([_goal("g1", "event-plan.md", PLAN, None)])
+    s = Session(ROTA, "Make the rota and send it.", model, runs_dir=tmp_path).start()
+    assert s.items[0].state == "conflict" and s.current_question() is s.items[0]
+
+
+def test_a_goal_under_another_heading_is_still_found(tmp_path):
+    g = _goal("g1", "event-plan.md", PLAN, False)
+    g["heading"] = "Other"
+    s = Session(ROTA, "Draft the rota only.", _GoalModel([g]), runs_dir=tmp_path).start()
+    assert s.items[0].heading == "Goal and deliverable" and s.items[0].state == "conflict"
+    assert not any(it.id == "g1" and it.heading == "Other" for it in s.items[1:])
+
+
+def test_stopping_at_the_limit_leaves_the_intent_clash_open(tmp_path):
+    s = Session(ROTA, "Draft the rota only.", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, limit=0.5).start()
+    assert s.at_limit()
+    s.limit_choice("stop")
+    goal = s.items[0]
+    assert goal.state == "conflict" and goal.way == "wait" and "only you can settle it" in goal.reason
+
+
+def test_a_task_folder_path_means_its_materials_so_the_answer_sheet_is_never_read():
+    from elicitagent.server import resolve_folder
+
+    assert resolve_folder("tasks/rota") == ROTA.resolve()
+    assert resolve_folder("tasks/rota/materials") == ROTA.resolve()

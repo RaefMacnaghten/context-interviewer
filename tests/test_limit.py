@@ -13,7 +13,7 @@ ROTA = REPO / "tasks" / "rota" / "materials"
 
 
 def make(tmp_path, **kw):
-    return Session(ROTA, "x", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, **kw).start()
+    return Session(ROTA, "", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, **kw).start()
 
 
 def test_questions_come_in_order_of_value(tmp_path):

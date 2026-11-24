@@ -16,7 +16,7 @@ def main(argv: list[str] | None = None) -> int:
                          help="auto uses the Anthropic API when ANTHROPIC_API_KEY is set, else the simulated model")
 
     p_dry = sub.add_parser("dry-run", help="run one interview with a script playing the person from the answer sheet")
-    p_dry.add_argument("task", help="a task folder holding materials/, request.txt and an answer sheet, e.g. tasks/rota")
+    p_dry.add_argument("task", help="a task folder holding materials/, intent.txt and an answer sheet, e.g. tasks/rota")
     p_dry.add_argument("--model", choices=["auto", "simulated", "anthropic"], default="auto")
     p_dry.add_argument("--rule", default="cost-weighted")
     p_dry.add_argument("--threshold", type=float, default=None)

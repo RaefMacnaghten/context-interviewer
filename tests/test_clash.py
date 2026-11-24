@@ -34,7 +34,7 @@ def test_no_clash_when_values_agree_or_same_document_or_other_heading():
 
 
 def test_rota_clash_is_asked_as_choose_showing_both_passages(tmp_path):
-    s = Session(ROTA, "x", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path).start()
+    s = Session(ROTA, "", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path).start()
     clash = [i for i in s.items if i.state == "conflict"]
     assert len(clash) == 1
     c = clash[0]
@@ -51,7 +51,7 @@ def test_rota_clash_is_asked_as_choose_showing_both_passages(tmp_path):
 
 
 def test_skipped_clash_stays_in_conflict_and_is_in_ask_first(tmp_path):
-    s = Session(ROTA, "x", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path).start()
+    s = Session(ROTA, "", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path).start()
     while (q := s.current_question()) is not None:
         s.reply(q.id, "skip")
     c = next(i for i in s.items if i.sources)

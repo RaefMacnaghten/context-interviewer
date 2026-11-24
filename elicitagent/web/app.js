@@ -43,8 +43,9 @@ async function init() {
   config = await api("/api/config");
   const taskSelect = $("#task-select");
   for (const t of config.tasks) taskSelect.append(el("option", { value: t.folder }, `${t.name} (${t.folder})`));
-  taskSelect.addEventListener("change", fillRequest);
-  fillRequest();
+  taskSelect.addEventListener("change", () => { $("#folder-input").value = ""; fillIntent(taskSelect.value); });
+  $("#folder-input").addEventListener("input", (ev) => fillIntent(ev.target.value.trim() || taskSelect.value));
+  fillIntent(taskSelect.value);
   const ruleSelect = $("#rule-select");
   for (const r of config.rules) {
     const thr = r.threshold === null || r.threshold === undefined ? "" : `, ${r.threshold_name} = ${r.threshold}`;
@@ -66,9 +67,20 @@ async function init() {
   }
 }
 
-function fillRequest() {
-  const t = config.tasks.find((x) => x.folder === $("#task-select").value);
-  if (t) $("#request-input").value = t.request;
+// The box is pre-filled from the task folder's intent.txt so the person can edit it. A folder with no such file
+// leaves it empty. Only a pre-filled value is replaced: what the person typed themselves is kept.
+let prefilled = "";
+function fillIntent(folder) {
+  const box = $("#intent-input");
+  if (box.value.trim() && box.value !== prefilled) return;
+  // accept the materials folder or the task folder, relative (with or without "./") or absolute
+  const wanted = folder.trim().replace(/\/+$/, "").replace(/^\.\//, "");
+  const t = config.tasks.find((x) => {
+    const task = x.folder.replace(/\/materials$/, "");
+    return [x.folder, task].some((f) => wanted === f || wanted.endsWith("/" + f));
+  });
+  prefilled = t ? t.intent : "";
+  box.value = prefilled;
 }
 
 async function start(ev) {
@@ -82,7 +94,7 @@ async function start(ev) {
   try {
     view = await api("/api/session", {
       folder,
-      request: $("#request-input").value,
+      intent: $("#intent-input").value,
       rule: $("#rule-select").value,
       model: $("#model-select").value,
       limit: $("#limit-input").value.trim() || "none",
@@ -116,7 +128,7 @@ async function reply(action, value, who) {
 
 // Stage 7: the source passage expands in place with a few lines of context, highlighted. No file viewer.
 function sourceView(key, documentName, passage, context, compact = false) {
-  if (!documentName || !passage) return null;
+  if (!documentName || !passage || documentName === "the person") return null;
   const open = openSources.has(key);
   const toggle = el("button", { class: "source-toggle", "aria-expanded": open ? "true" : "false",
     onclick: () => { open ? openSources.delete(key) : openSources.add(key); render(); } },
@@ -152,6 +164,16 @@ async function renderWhy(container, itemId) {
     return;
   }
   const d = data.decided;
+  if (d.chance_wrong === null || d.chance_wrong === undefined) {
+    // the clash between the person's intent and the folder's goal: never went to the ask table
+    container.replaceChildren(
+      el("p", { class: "why-title" }, "Why this question (read-only, from the gap trace)"),
+      el("dl", { class: "why-list" }, [el("dt", {}, "Kind of question"), el("dd", {}, `${d.question_kind}, cost ${d.question_cost}`),
+        el("dt", {}, "Rule"), el("dd", {}, "None: what you typed never goes to the ask table.")]),
+      el("p", { class: "why-reason" }, d.reason),
+    );
+    return;
+  }
   const rows = [
     ["Chance a guess is wrong", `${pct(d.chance_wrong)} (the model's estimate)`],
     ["Could a mistake be undone?", `${yn(d.can_undo)} (the model's answer)`],
@@ -344,11 +366,13 @@ function renderQuestion() {
   }
   let clash = null;
   if (q.kind === "choose" && q.sources && q.sources.length) {
-    clash = el("div", { class: "clash" }, el("p", { class: "clash-title" }, "The documents disagree. Which is right?"));
+    const withYou = q.sources.some((src) => src.person);
+    clash = el("div", { class: "clash" }, el("p", { class: "clash-title" },
+      withYou ? "What you typed and the folder disagree. Which is right?" : "The documents disagree. Which is right?"));
     for (const src of q.sources) {
       clash.append(el("button", { class: "clash-option", onclick: () => reply("answer", src.value) },
         el("span", { class: "clash-value" }, src.value),
-        el("span", { class: "clash-source" }, `from ${src.document}`)));
+        el("span", { class: "clash-source" }, src.person ? "what you typed on the start page" : `from ${src.document}`)));
     }
   } else if (q.kind === "choose") {
     for (const c of q.candidates) replies.append(el("button", { onclick: () => reply("answer", c) }, c));
@@ -376,10 +400,10 @@ function renderQuestion() {
 function renderItems() {
   const pane = $("#items-pane");
   const currentId = view.question && !view.finished ? view.question.item : null;
-  pane.replaceChildren(
+  pane.replaceChildren(...[
     el("h2", {}, "Brief in progress"),
-    el("p", { class: "doc-request" }, `Request: ${view.request}`),
-  );
+    view.intent ? null : el("p", { class: "doc-request" }, "You did not say what you want the agent to do, so the goal comes from the folder."),
+  ].filter(Boolean));
   for (const heading of view.headings) {
     const items = view.items.filter((i) => i.heading === heading);
     pane.append(el("h3", {}, heading));
@@ -394,9 +418,10 @@ function renderItems() {
         el("span", { class: `state ${stateClass(it.state)}` }, it.rejected ? "rejected" : it.state),
         el("div", { class: "item-body" },
           el("div", {}, el("span", { class: "item-label" }, it.label), it.value && it.state !== "conflict" ? el("span", { class: "item-value" }, `: ${it.value}`) : null),
-          el("div", { class: "item-meta" }, `${it.stated_or_inferred} · ${it.must_hold_or_nice} · ${it.way}${it.document ? " · " + it.document : ""}${it.who_could ? " · who could: " + it.who_could : ""}${it.source === "person" ? " · settled by you" : ""}`),
+          el("div", { class: "item-meta" }, `${it.way === "said by the person" ? "your intent" : it.stated_or_inferred} · ${it.must_hold_or_nice} · ${it.way}${it.document ? " · " + it.document : ""}${it.who_could ? " · who could: " + it.who_could : ""}${it.source === "person" && it.way !== "said by the person" ? " · settled by you" : ""}`),
           it.sources && it.sources.length ? el("div", { class: "item-meta clash-note" },
-            "Documents disagree: " + it.sources.map((src) => `${src.value} (${src.document})`).join(" vs ")) : null,
+            (it.sources.some((src) => src.person) ? "Your intent and the folder disagree: " : "Documents disagree: ")
+              + it.sources.map((src) => `${src.value} (${src.person ? "you" : src.document})`).join(" vs ")) : null,
           it.passage ? sourceView(`i-${it.id}`, it.document, it.passage, it.context, true) : null,
           ...(it.sources || []).map((src, n) => sourceView(`i-${it.id}-${n}`, src.document, src.passage, src.context, true)),
           editing === it.id ? editBox(it) : null,

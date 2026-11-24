@@ -1,4 +1,5 @@
-"""One interview: read the folder, list items, decide each gap, take replies, write the brief and the gap trace."""
+"""One interview: take the person's intent, read the folder, list items, decide each gap, take replies, write the
+brief and the gap trace."""
 
 from __future__ import annotations
 
@@ -19,11 +20,18 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # How an item can be handled overall. The first two are reading the folder, which comes before the ask
 # table; the ask table's three outcomes follow; "not available here" is set only by the person's reply "I can't answer this".
+SAID = "said by the person"  # the intent typed on the start page: confirmed by the person, never reaches the ask table
 FIRST_LOOK = "read a file (first look)"
 NOT_AVAILABLE = "not available here"
 CANT_ANSWER = "I can't answer this"
 SECOND_LOOK = "read a file (second look)"
 DEFAULT_RUNS_DIR = REPO_ROOT / "runs"
+# The goal of the task: the person's intent and the folder's own statement of the goal share this heading and key.
+GOAL_HEADING = "Goal and deliverable"
+GOAL_KEY = "goal"
+GOAL_LABEL = "What the agent should do"
+INTENT_ID = "intent"
+PERSON = "the person"  # shown wherever a document name would be, for what the person said
 
 
 @dataclass
@@ -40,6 +48,8 @@ class Item:
     passage: str | None
     passage_found: bool
     named_person: bool
+    # for the folder's goal item only: does it ask for the same thing as the person's intent? None when no intent
+    agrees_with_intent: bool | None = None
     # the model's estimate and the two checks (only for gaps; None for items filled from the folder)
     chance_wrong: float | None = None
     can_undo: bool | None = None
@@ -64,6 +74,8 @@ class Item:
     merged_from: list[str] = field(default_factory=list)
     # stage 4: the person rejected this item (it does not belong in the brief)
     rejected: bool = False
+    # the clash between the person's intent and the folder's goal: asked before anything else
+    ask_first: bool = False
 
     @property
     def stated_or_inferred(self) -> str:
@@ -104,7 +116,8 @@ def merge_clashes(items: list[Item]) -> list[Item]:
         for g in with_value:
             if g.value not in candidates:
                 candidates.append(g.value)
-        first.sources = [{"id": g.id, "document": g.document, "passage": g.passage, "value": g.value} for g in with_value]
+        first.sources = [{"id": g.id, "document": g.document, "passage": g.passage, "value": g.value,
+                          "agrees_with_intent": g.agrees_with_intent} for g in with_value]
         first.merged_from = [g.id for g in group]
         first.candidates = candidates
         first.value = candidates[0]
@@ -124,6 +137,13 @@ def merge_clashes(items: list[Item]) -> list[Item]:
     return out
 
 
+def disagreement(it: Item) -> str:
+    """How a clash reads: between documents, or between the person's intent and the folder."""
+    if any(src.get("person") for src in it.sources):
+        return "your intent and the folder disagree"
+    return "the documents disagree"
+
+
 def task_name_for(folder_path: str | Path) -> str:
     p = Path(folder_path).resolve()
     return _slug(p.parent.name if p.name == "materials" else p.name)
@@ -133,7 +153,7 @@ class Session:
     def __init__(
         self,
         folder_path: str | Path,
-        request: str,
+        intent: str,
         model: Model,
         table: AskTable | None = None,
         rule: str = "cost-weighted",
@@ -144,7 +164,7 @@ class Session:
     ):
         self.id = uuid.uuid4().hex[:12]
         self.folder_path = Path(folder_path).resolve()
-        self.request = request.strip()
+        self.intent = (intent or "").strip()  # what the person wants the agent to do; empty if they left it blank
         self.model = model
         self.table = table or AskTable.load()
         if rule not in self.table.rules:
@@ -187,12 +207,17 @@ class Session:
     def start(self) -> "Session":
         self.folder = read_folder(self.folder_path)
         # First look: the model lists items with their sources; clashes between documents are merged (P11).
-        raw_items = self.model.list_items(self.request, self.folder)
+        raw_items = self.model.list_items(self.intent, self.folder)
         items = merge_clashes([self._normalise(raw, i) for i, raw in enumerate(raw_items)])
+        # The person's intent is the first goal item. With no intent, the goal is worked out from the folder.
+        if self.intent:
+            items = self._with_intent(items)
         # Reading the folder comes before the ask table. An item the folder states is filled from the file
         # and never reaches the ask table.
         missing = []
         for it in items:
+            if it.way:
+                continue  # said by the person, or the clash between the intent and the folder's goal
             if it.state == "conflict":
                 continue  # the documents disagree: a gap, settled by a choose question
             if it.stated:
@@ -201,7 +226,7 @@ class Session:
                 missing.append(it)
         # One targeted second look for each item the first look did not find.
         if missing:
-            found = self.model.second_look(self.request, self.folder, [self._model_view(it) for it in missing])
+            found = self.model.second_look(self.intent, self.folder, [self._model_view(it) for it in missing])
             for it in missing:
                 hit = found.get(it.id)
                 if hit and self._verified(hit):
@@ -212,7 +237,7 @@ class Session:
                     self._fill_from_file(it, SECOND_LOOK)
         # Only what is still missing is a gap. The model estimates for gaps only; the ask table decides.
         gaps = [it for it in items if not it.way]
-        estimates = self.model.estimate(self.request, self.folder, [self._model_view(it) for it in gaps]) if gaps else {}
+        estimates = self.model.estimate(self.intent, self.folder, [self._model_view(it) for it in gaps]) if gaps else {}
         for it in gaps:
             est = estimates.get(it.id) or {}
             it.chance_wrong = min(1.0, max(0.0, float(est.get("chance_wrong", 0.5))))
@@ -228,6 +253,54 @@ class Session:
             self._log(it, "decided", it.value)
         self._check_limit()
         return self
+
+    def _with_intent(self, items: list[Item]) -> list[Item]:
+        """The intent becomes the first item under "Goal and deliverable", confirmed by the person, with the
+        person as its source. It never reaches the ask table.
+
+        The first look always lists the folder's goal (key "goal"), with the model's answer to whether it asks for
+        the same thing as the intent. Each document that states a goal is one side. A side that agrees is recorded
+        in the reason (with its document and passage) and not listed twice. A side that differs, or for which the
+        model gave no answer, makes a clash between the person's sentence and the document's passage. Because the
+        intent never reaches the ask table, that clash is always asked, first, as a choose question. A goal the
+        model only inferred (no document states it) is settled by the intent and left out."""
+        goals = [it for it in items if it.key == GOAL_KEY or (it.heading == GOAL_HEADING and it.label == GOAL_LABEL)]
+        rest = [it for it in items if it not in goals]
+        sides = []
+        for g in goals:
+            if g.sources:
+                sides += [dict(src) for src in g.sources]
+            elif g.stated and g.document:
+                sides.append({"id": g.id, "document": g.document, "passage": g.passage, "value": g.value,
+                              "agrees_with_intent": g.agrees_with_intent})
+        agree = [src for src in sides if src.get("agrees_with_intent") is True]
+        differ = [src for src in sides if src.get("agrees_with_intent") is not True]
+        same = " ".join(f'{src["document"]} says the same: "{" ".join((src["passage"] or "").split())}".' for src in agree)
+        dropped = [i for g in goals for i in (g.merged_from or [g.id])]
+        if differ:
+            person_src = {"id": INTENT_ID, "document": PERSON, "passage": self.intent, "value": self.intent, "person": True}
+            g = goals[0]
+            g.sources = [person_src] + differ
+            g.merged_from = [INTENT_ID] + dropped
+            g.candidates = []
+            for src in g.sources:
+                if src["value"] not in g.candidates:
+                    g.candidates.append(src["value"])
+            g.heading, g.key, g.label = GOAL_HEADING, GOAL_KEY, GOAL_LABEL
+            g.value, g.state, g.stated, g.must_hold, g.named_person = self.intent, "conflict", False, True, False
+            g.document = g.passage = None
+            g.passage_found = False
+            g.way, g.kind, g.cost, g.pending, g.ask_first = "ask", "choose", self.table.cost["choose"], True, True
+            g.reason = ("Asked first: what you typed and the folder disagree about the goal. Your intent never goes "
+                        "to the ask table, so you choose." + (f" {same}" if same else ""))
+            return [g] + rest
+        said = Item(
+            id=INTENT_ID, heading=GOAL_HEADING, key=GOAL_KEY, label=GOAL_LABEL, value=self.intent,
+            candidates=[self.intent], stated=True, must_hold=True, document=None, passage=None, passage_found=False,
+            named_person=False, way=SAID, state="confirmed", source="person", merged_from=dropped,
+        )
+        said.reason = "Said by the person on the start page." + (f" {same}" if same else "")
+        return [said] + rest
 
     def _fill_from_file(self, it: Item, look: str) -> None:
         it.way = look
@@ -262,6 +335,7 @@ class Session:
             passage=passage if found else None,
             passage_found=found,
             named_person=bool(raw.get("about_named_person")),
+            agrees_with_intent=raw.get("agrees_with_intent"),
         )
 
     @staticmethod
@@ -296,8 +370,9 @@ class Session:
         it.way, it.kind, it.cost = d.way, d.kind, d.cost
         it.harm_band, it.harm, it.reason, it.value_order = d.harm_band, d.harm, d.reason, d.value
         conflict = it.state == "conflict"
+        disagree = disagreement(it)
         if conflict and d.way != "guess and mark it":
-            it.reason = d.reason + " The documents disagree."
+            it.reason = d.reason + f" {disagree[0].upper()}{disagree[1:]}."
         if d.way == "ask":
             it.pending = True
             if not conflict:
@@ -305,7 +380,7 @@ class Session:
         elif d.way == "guess and mark it":
             it.state, it.source = "assumed", "guess"
             if conflict:
-                it.reason = d.reason + f" The documents disagree; it took {it.value}."
+                it.reason = d.reason + f" {disagree[0].upper()}{disagree[1:]}; it took {it.value}."
         elif d.way == "wait":
             it.state = "conflict" if conflict else "open"
 
@@ -314,7 +389,7 @@ class Session:
     def queue(self) -> list[Item]:
         """Questions still to ask, most valuable first (P6): (chance wrong x harm) / cost, largest first."""
         waiting = [it for it in self.items if it.pending and not it.rejected]
-        return sorted(waiting, key=lambda it: -it.value_order)
+        return sorted(waiting, key=lambda it: (not it.ask_first, -it.value_order))
 
     def at_limit(self) -> bool:
         q = self.queue()
@@ -355,11 +430,12 @@ class Session:
                 it.pending = False
                 # P8: anything that cannot be undone is left open, and so is any fact about a named person;
                 # the rest is guessed and marked. With nothing to guess from, it is left open too.
-                if not it.can_undo or it.named_person or not it.value:
+                if it.ask_first or not it.can_undo or it.named_person or not it.value:
                     it.way = "wait"
                     it.state = "conflict" if it.sources else "open"
                     it.reason = "Left open when you stopped at the limit: " + (
-                        "a wrong guess could not be undone." if not it.can_undo
+                        "what you typed and the folder disagree about the goal, and only you can settle it." if it.ask_first
+                        else "a wrong guess could not be undone." if not it.can_undo
                         else "personal facts about a named person are never guessed." if it.named_person
                         else "there is nothing to guess from.")
                 else:
@@ -498,8 +574,8 @@ class Session:
                 "reason": it.reason,
                 "event": event,
                 "value": value,
-                "source_document": it.document if not it.sources else " | ".join(src["document"] for src in it.sources),
-                "source_passage": it.passage if not it.sources else " | ".join(src["passage"] or "" for src in it.sources),
+                "source_document": (PERSON if it.way == SAID else it.document) if not it.sources else " | ".join(src["document"] for src in it.sources),
+                "source_passage": (self.intent if it.way == SAID else it.passage) if not it.sources else " | ".join(src["passage"] or "" for src in it.sources),
                 "question_count": self.question_count,
                 "running_cost": round(self.running_cost, 4),
                 "limit_reached": self.limit_reached,
@@ -543,7 +619,7 @@ class Session:
         return {
             "id": self.id,
             "task": self.task,
-            "request": self.request,
+            "intent": self.intent,
             "run": self.run,
             "rule": self.rule,
             "rule_label": self.table.rule_label(self.rule),

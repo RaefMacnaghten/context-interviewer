@@ -6,8 +6,12 @@
   estimates from a JSON file, so the tool and its tests run with no key. Every
   run made with it is labelled "simulated".
 
+Every call receives the person's intent (what they want the agent to do, in
+their own words) as the task, or a note that they gave none.
+
 The model does three things only: it lists items under the headings with their
-sources (the first look), looks again in the folder for each item the first
+sources, including the folder's own statement of the goal and whether it agrees
+with the intent (the first look), looks again in the folder for each item the first
 look did not find (one targeted second look), and, for each item still missing
 (a gap), estimates the chance a guess is wrong and answers the two yes-or-no
 checks. It never chooses what to do; the ask table does.
@@ -35,18 +39,22 @@ class Model(ABC):
     kind: str  # "real" or "simulated"
 
     @abstractmethod
-    def list_items(self, request: str, folder: Folder) -> list[dict]:
-        """Items under the eight headings and "other", with stated or inferred, must hold or nice, and sources."""
+    def list_items(self, intent: str, folder: Folder) -> list[dict]:
+        """Items under the eight headings and "other", with stated or inferred, must hold or nice, and sources.
+
+        One of them is the goal (heading "Goal and deliverable", key "goal"), with agrees_with_intent: True or
+        False when the person gave an intent, None when they did not.
+        """
 
     @abstractmethod
-    def second_look(self, request: str, folder: Folder, items: list[dict]) -> dict[str, dict | None]:
+    def second_look(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict | None]:
         """One targeted second look in the folder for each item the first look did not find.
 
         Per item id: {"value", "document", "passage"} when the folder states it, else None.
         """
 
     @abstractmethod
-    def estimate(self, request: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
+    def estimate(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
         """Per item id: chance_wrong (0 to 1), can_undo, would_notice, model_would_ask."""
 
 
@@ -71,25 +79,31 @@ class SimulatedModel(Model):
         """Convention: the script lives next to the materials folder, as simulated-model.json."""
         return cls(Path(folder_path).resolve().parent / "simulated-model.json")
 
-    def list_items(self, request: str, folder: Folder) -> list[dict]:
+    def list_items(self, intent: str, folder: Folder) -> list[dict]:
+        # The stand-in cannot judge meaning. Its goal item lists the intents it was written for
+        # ("goal_agrees_with"); it counts those as agreeing with the folder's goal and any other as differing.
         out = []
         for raw in self.script["items"]:
-            item = {k: v for k, v in raw.items() if k != "estimate"}
+            item = {k: v for k, v in raw.items() if k not in ("estimate", "goal_agrees_with")}
+            agrees = None
+            if "goal_agrees_with" in raw and intent.strip():
+                agrees = _plain(intent) in {_plain(x) for x in raw["goal_agrees_with"]}
+            item["agrees_with_intent"] = agrees
             out.append(item)
         return out
 
-    def second_look(self, request: str, folder: Folder, items: list[dict]) -> dict[str, dict | None]:
+    def second_look(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict | None]:
         found = self.script.get("second_look", {})
         return {item["id"]: found.get(item["id"]) for item in items}
 
-    def estimate(self, request: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
+    def estimate(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
         by_id = {raw["id"]: raw.get("estimate", {}) for raw in self.script["items"]}
         return {item["id"]: by_id.get(item["id"], {}) for item in items}
 
 
 # ---------------------------------------------------------------- Anthropic API
 
-LIST_SYSTEM = """You help a person hand a task to an AI agent. You read the person's request and the folder of materials they handed over, and you list every item the agent would need to know to do the task well.
+LIST_SYSTEM = """You help a person hand a task to an AI agent. You read what the person wants the agent to do (their intent, if they gave one) and the folder of materials they handed over, and you list every item the agent would need to know to do the task well.
 
 Put each item under exactly one of these headings: {headings}. Use "Other" only when no heading fits.
 
@@ -105,6 +119,9 @@ For each item give:
 - document: the file name the value came from, exactly as given, or null.
 - passage: the exact text copied character for character from that document that supports the value, or null. Never paraphrase a passage. If two documents disagree, list one item per document, each with its own document's value and passage.
 - about_named_person: true when the item is a personal fact about a named person (their availability, age, health, relationships, and the like).
+- agrees_with_intent: null for every item except the goal (below).
+
+Always list the overall goal of the task under "Goal and deliverable" with key "goal" and label "What the agent should do". Its value is the goal as a document in the folder states it (stated true, with that document and passage); if more than one document states a goal, list one goal item per document, each with key "goal". When no document states it, list one goal item with your best reading of the goal from the folder (stated false). If the person gave an intent, set each goal item's agrees_with_intent to true when that goal asks the agent for the same thing as the intent, and to false when it asks for something different that would change what the agent does. If the person gave no intent, set it to null.
 
 List items that are missing from the folder too, with value null and stated false: the gaps are the point. Do not decide whether to ask; only list."""
 
@@ -166,6 +183,7 @@ LIST_SCHEMA = {
                     "document": {"type": ["string", "null"]},
                     "passage": {"type": ["string", "null"]},
                     "about_named_person": {"type": "boolean"},
+                    "agrees_with_intent": {"type": ["boolean", "null"]},
                 },
                 "required": [
                     "id",
@@ -179,6 +197,7 @@ LIST_SCHEMA = {
                     "document",
                     "passage",
                     "about_named_person",
+                    "agrees_with_intent",
                 ],
                 "additionalProperties": False,
             },
@@ -210,6 +229,16 @@ ESTIMATE_SCHEMA = {
     "required": ["estimates"],
     "additionalProperties": False,
 }
+
+
+def _plain(text: str) -> str:
+    return " ".join("".join(c.lower() if c.isalnum() else " " for c in text).split())
+
+
+def _intent_block(intent: str) -> str:
+    if intent.strip():
+        return f"What the person wants the agent to do, in their own words:\n<intent>\n{intent.strip()}\n</intent>"
+    return "The person did not say what they want the agent to do. Work out the goal from the folder."
 
 
 def _folder_as_text(folder: Folder) -> str:
@@ -268,17 +297,17 @@ class AnthropicModel(Model):
         except json.JSONDecodeError as exc:
             raise ModelError(f"The model returned invalid JSON: {exc}") from exc
 
-    def list_items(self, request: str, folder: Folder) -> list[dict]:
+    def list_items(self, intent: str, folder: Folder) -> list[dict]:
         system = LIST_SYSTEM.format(headings=", ".join(f'"{h}"' for h in ALL_HEADINGS))
-        user = f"The person's request:\n<request>\n{request}\n</request>\n\nThe folder:\n{_folder_as_text(folder)}"
+        user = f"{_intent_block(intent)}\n\nThe folder:\n{_folder_as_text(folder)}"
         return self._call(system, user, LIST_SCHEMA)["items"]
 
-    def second_look(self, request: str, folder: Folder, items: list[dict]) -> dict[str, dict | None]:
+    def second_look(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict | None]:
         if not items:
             return {}
         slim = [{k: item.get(k) for k in ("id", "heading", "label")} for item in items]
         user = (
-            f"The person's request:\n<request>\n{request}\n</request>\n\nThe folder:\n{_folder_as_text(folder)}\n\n"
+            f"{_intent_block(intent)}\n\nThe folder:\n{_folder_as_text(folder)}\n\n"
             f"Look again for each of these items:\n{json.dumps(slim, indent=1)}"
         )
         data = self._call(SECOND_LOOK_SYSTEM, user, SECOND_LOOK_SCHEMA)
@@ -288,13 +317,13 @@ class AnthropicModel(Model):
                 out[r["id"]] = {"value": r["value"], "document": r["document"], "passage": r["passage"]}
         return out
 
-    def estimate(self, request: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
+    def estimate(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
         slim = [
             {k: item.get(k) for k in ("id", "heading", "label", "value", "candidates", "stated", "document", "passage", "about_named_person")}
             for item in items
         ]
         user = (
-            f"The person's request:\n<request>\n{request}\n</request>\n\nThe folder:\n{_folder_as_text(folder)}\n\n"
+            f"{_intent_block(intent)}\n\nThe folder:\n{_folder_as_text(folder)}\n\n"
             f"The items:\n{json.dumps(slim, indent=1)}"
         )
         data = self._call(ESTIMATE_SYSTEM, user, ESTIMATE_SCHEMA)

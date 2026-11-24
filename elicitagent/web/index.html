@@ -18,15 +18,19 @@
       <h2>Hand a task to an agent</h2>
       <p class="muted">ElicitAgent reads the folder first, then asks only what the folder does not settle.</p>
       <form id="start-form">
-        <label>Folder of materials
-          <select id="task-select"></select>
-        </label>
-        <label>Or a folder path
-          <input id="folder-input" type="text" placeholder="tasks/rota/materials">
-        </label>
-        <label>What do you want the agent to do?
-          <textarea id="request-input" rows="2"></textarea>
-        </label>
+        <div class="pick">
+          <div class="pick-folder">
+            <label>Folder of materials
+              <select id="task-select"></select>
+            </label>
+            <label>Or a folder path
+              <input id="folder-input" type="text" placeholder="tasks/rota/materials">
+            </label>
+          </div>
+          <label class="pick-intent">What do you want the agent to do? <span class="hint">One or two sentences</span>
+            <textarea id="intent-input" rows="4" placeholder="Leave it empty and the tool works out the goal from the folder."></textarea>
+          </label>
+        </div>
         <div class="row">
           <label>Rule
             <select id="rule-select"></select>
