@@ -375,6 +375,7 @@ async function renderWhy(container, itemId) {
     el("dl", { class: "kv" }, rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)])),
     working ? el("p", { class: "why-working" }, working) : null,
     data.clash && d.way === "ask" ? el("p", { class: "why-working" }, "A clash is always asked, whatever this arithmetic says: the plan settles a clash by a choose question that shows both sides.") : null,
+    !data.clash && (d.reason || "").startsWith("Asked: must hold") ? el("p", { class: "why-working" }, "This item must hold and the tool will not guess it, so it is asked whatever this arithmetic says.") : null,
     el("p", { class: "why-reason" }, d.reason),
     el("p", { class: "small" }, `Order of value: (chance wrong x harm) / cost = ${num(d.chance_wrong * d.harm / d.question_cost)}. Higher comes first.`),
     el("p", { class: "small" }, "Taken from the gap trace. Nothing here can be changed."),
@@ -481,11 +482,11 @@ function renderLimit(pane) {
   pane.append(
     el("div", { class: "ph" }, el("span", { class: "glyph", "aria-hidden": "true" }, "◷"), "You have reached your question limit"),
     el("div", { class: "pb" },
-      el("p", { class: "lead" }, `Your limit is ${view.limit} in question cost, and you have used ${view.running_cost}. ` +
-        `I think I need at least ${need.questions} more ${plural}, with a question cost of ${need.cost}.`),
+      el("p", { class: "lead" }, `Your limit is ${view.limit} ${view.limit === 1 ? "question" : "questions"}, and ${view.question_count} ${view.question_count === 1 ? "has" : "have"} been asked. ` +
+        `I think I need at least ${need.questions} more ${plural}.`),
       el("p", { class: "callout warn" }, "This is a lower bound: an answer can reveal a new gap. The most important questions came first."),
       el("div", { class: "brow" },
-        el("button", { class: "b pr", onclick: () => limitChoice("continue") }, `Continue (${config.limit_start} more)`),
+        el("button", { class: "b pr", onclick: () => limitChoice("continue") }, `Continue (${config.limit_start} more questions)`),
         el("button", { class: "b", onclick: () => limitChoice("stop") }, "Stop here")),
       el("p", { class: "small" }, "If you stop: anything that cannot be undone, any fact about a named person and any clash is left open for the agent to ask; the rest is guessed and marked assumed.")),
   );
@@ -519,7 +520,7 @@ function renderEndScreen(pane) {
   pane.append(
     el("div", { class: "ph" }, el("span", { class: "glyph", "aria-hidden": "true" }, "◉"), "Review before the brief is written"),
     el("div", { class: "pb" }, ...[
-      el("p", {}, `No more questions. Asked ${view.question_count}, question cost ${view.running_cost}. Check the brief on the right once: confirm, edit or reject anything. Then write it.`),
+      el("p", {}, `No more questions. Asked ${view.question_count}. Check the brief on the right once: confirm, edit or reject anything. Then write it.`),
       section("Waiting", "Not settled. Answer any you can here; the brief passes the rest to the agent as \"ask before you do this\".", waiting, null, reviewAnswer),
       section("Guessed and marked", "The tool guessed these. Confirm or edit any you can.", assumed, "assumed"),
       section("Not available here", "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, "not available here", (it) => {
@@ -556,7 +557,7 @@ function renderProgress() {
   for (const it of view.items) counts[it.state] = (counts[it.state] || 0) + 1;
   const order = ["confirmed", "assumed", "open", "conflict", "not available here"];
   $("#progress-pane").replaceChildren(el("div", { class: "pb" }, ...[
-    el("div", {}, `Questions asked: ${view.question_count} · question cost ${view.running_cost}${view.limit !== null ? ` of ${view.limit}` : ""} · ${view.questions_left} waiting`),
+    el("div", {}, `Questions asked: ${view.question_count}${view.limit !== null ? ` of ${view.limit}` : ""} · ${view.questions_left} waiting`),
     el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => stateChip(s, `${counts[s]} ${s}`))),
     el("div", {}, `Read ${view.documents.length} documents: `, ...view.documents.flatMap((d, i) => [i ? " " : "", el("span", { class: "src" }, d)])),
     view.skipped.length ? el("div", {}, `Not read: ${view.skipped.map((s) => `${s.name} (${s.reason})`).join("; ")}`) : null,
@@ -621,7 +622,7 @@ function renderQuestion() {
   pane.append(...[
     el("div", { class: "q-head" },
       el("span", { class: "q-num" }, `Question ${view.question_count + 1}`),
-      el("span", { class: "kind" }, `${q.kind} question · costs ${q.cost}`),
+      el("span", { class: "kind" }, `${q.kind} question`),
       el("span", { class: "sp" }),
       el("button", { class: `b sm why-toggle ${whyOpen ? "on" : ""}`, "aria-expanded": whyOpen ? "true" : "false", onclick: () => { whyOpen = !whyOpen; render(); } },
         whyOpen ? "Hide why" : "Why this question?")),
@@ -713,14 +714,15 @@ function renderMeter() {
   const m = $("#meter");
   if (view.status !== "ready") { m.hidden = true; return; }
   m.hidden = false;
+  // Plan change 2: the person sees the limit as a number of questions; question cost stays in the why panel.
   const limit = view.limit;
-  const used = view.running_cost;
-  const frac = limit ? Math.min(1, used / limit) : 0;
+  const used = view.question_count;
+  const frac = limit ? Math.min(1, used / limit) : (limit === 0 ? 1 : 0);
   m.replaceChildren(...[
-    el("span", {}, "question cost ", el("b", {}, String(used)), limit !== null ? ` of ${limit}` : ""),
-    limit !== null ? el("span", { class: "bar2", role: "img", "aria-label": `${used} of ${limit} used` },
+    el("span", {}, el("b", {}, String(used)), limit !== null ? ` of ${limit} ${limit === 1 ? "question" : "questions"} asked`
+      : ` ${used === 1 ? "question" : "questions"} asked`),
+    limit !== null ? el("span", { class: "bar2", role: "img", "aria-label": `${used} of ${limit} questions asked` },
       el("i", { class: frac >= 1 ? "hot" : "", style: `width:${Math.round(frac * 100)}%` })) : null,
-    el("span", {}, el("b", {}, String(view.question_count)), ` ${view.question_count === 1 ? "question" : "questions"} asked`),
   ].filter(Boolean));
 }
 

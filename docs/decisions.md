@@ -8,7 +8,7 @@ The first round of answers, covering questions 1 to 7, is taken from the author'
 
 Entries 1 to 4, 12, 14 to 31 and the closing section were added on 24 Nov 2026 from the conversation with the AI assistant and the design question board, each under the true date of its decision (11, 17, 18 to 19 and 24 Nov 2026), so nothing reads as backdated. Entries 5 to 11 and 13 are the first eight entries, renumbered into date order, with their cross-references updated and otherwise unchanged. Where the record holds only the AI's own summary at the time of what the author had challenged, the entry labels it as the AI's summary and never sets it as a blockquote or in his voice. Where the record has both his words and such a summary, both are given, each labelled.
 
-Entry 32 was added on 24 Nov 2026, after the author's own real-model run on the rota task, from his message about that run and the AI's reading of the run's gap trace, which is labelled as the AI's reading.
+Entries 32 and 33 were added on 24 Nov 2026, after the author's own real-model run on the rota task, from his message about that run and the AI's reading of the run's gap trace, which is labelled as the AI's reading.
 
 Entries 14 to 20 cover the nine design lines the AI set out on 18 Nov 2026, with its own table of what each line first said, what it became and why. Seven of the nine lines changed because of the author's challenges on 18 and 19 Nov 2026, one entry per line; the record does not give a finer date for each. Lines 7 and 9 changed as consequences or for naming, not from a challenge, so they have no entry. The closing section lists items the AI raised and the author confirmed.
 
@@ -595,6 +595,24 @@ He agreed the must-hold branch as proposed. This is a change to the approved pla
 **Why:** His question found that the tool left must-hold items for the agent to ask when he was there to answer them.
 
 **Original / AI-assisted:** Original: finding the problem in his own run. AI-assisted: the reading of the trace and the design of the branch.
+
+## 33. The question limit is a number of questions
+
+**Date:** 24 Nov 2026
+
+**Question:** What the person sees as the question limit.
+
+**AI recommendation:** The approved plan (P9) counted the limit in question cost, which the person saw as "question cost 3 of 8". The AI's reading of his run's trace, not his words: his run stopped at question cost 3 of 8 after two questions. The AI proposed that the limit shown to the person be a number of questions, starting at 8, with question cost kept inside the rule, the gap trace and the "why this question" panel.
+
+**Author's decision:** The author's message, after his own real-model run, as in entry 32:
+
+> Why is it not asking me any more questions? There are 6 more open items?
+
+He agreed the change. It replaces P9's person-facing wording; question cost stays the test's cost axis.
+
+**Why:** The AI's reason, which he agreed: a count of questions is what the person can judge, and question cost is the rule's own unit.
+
+**Original / AI-assisted:** Original: the question that found the problem. AI-assisted: the reading of the trace and the change to the limit.
 
 ## AI-raised, confirmed by the author
 

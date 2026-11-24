@@ -150,6 +150,17 @@ def task_name_for(folder_path: str | Path) -> str:
     return _slug(p.parent.name if p.name == "materials" else p.name)
 
 
+def _whole(limit) -> int:
+    """The question limit: a whole number of questions, 0 or more."""
+    try:
+        n = float(limit)
+    except (TypeError, ValueError):
+        raise ValueError("The question limit is a number of questions, or none.") from None
+    if n < 0 or n != int(n):
+        raise ValueError("The question limit is a whole number of questions, or none.")
+    return int(n)
+
+
 class Session:
     def __init__(
         self,
@@ -161,7 +172,7 @@ class Session:
         threshold: float | None = None,
         runs_dir: str | Path | None = None,
         run_number: int | None = None,
-        limit: float | None | str = "default",
+        limit: int | None | str = "default",
     ):
         self.id = uuid.uuid4().hex[:12]
         self.folder_path = Path(folder_path).resolve()
@@ -187,9 +198,10 @@ class Session:
         self.question_count = 0
         self.running_cost = 0.0
         self.limit_reached = False
-        # P9: the limit is counted in question cost and starts at the ask table's value. None switches it off.
-        self.limit = self.table.limit_start if limit == "default" else (float(limit) if limit is not None else None)
-        self._limit_logged_at: float | None = None
+        # Plan change 2: the limit is a number of questions and starts at the ask table's value. None switches it
+        # off. Question cost is still counted, for the rule, the gap trace and the "why this question" panel.
+        self.limit = self.table.limit_start if limit == "default" else (_whole(limit) if limit is not None else None)
+        self._limit_logged_at: int | None = None
         self.stopped = False
         self.finished = False
         self.brief_path: Path | None = None
@@ -526,7 +538,7 @@ class Session:
 
     def at_limit(self) -> bool:
         q = self.queue()
-        return bool(q) and self.limit is not None and self.running_cost + q[0].cost > self.limit + 1e-9
+        return bool(q) and self.limit is not None and self.question_count >= self.limit
 
     def still_needed(self) -> dict:
         """P7: what the ask table says is still worth asking, from the model's estimates. A lower bound."""
@@ -545,7 +557,8 @@ class Session:
             self._limit_logged_at = self.limit
             need = self.still_needed()
             self._log(self.queue()[0], "limit reached",
-                      f"limit {self.limit:g}; at least {need['questions']} more questions, question cost {need['cost']:g}")
+                      f"limit {self.limit} questions; at least {need['questions']} more questions "
+                      f"(question cost {need['cost']:g})")
 
     def limit_choice(self, action: str) -> None:
         """At the limit the person continues (another round of the starting limit) or stops (P7, P8)."""
@@ -554,7 +567,7 @@ class Session:
         head = self.queue()[0]
         if action == "continue":
             self.limit += self.table.limit_start
-            self._log(head, "continue", f"limit now {self.limit:g}")
+            self._log(head, "continue", f"limit now {self.limit} questions")
             self._check_limit()
         elif action == "stop":
             self._log(head, "stop", None)

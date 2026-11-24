@@ -1,4 +1,5 @@
-"""Stage 6: questions in order of value (P6), the limit in question cost (P9), the at-the-limit message (P7) and stopping (P8)."""
+"""Stage 6: questions in order of value (P6), the limit in questions (plan change 2, replacing P9's question cost), the
+at-the-limit message (P7) and stopping (P8)."""
 
 from pathlib import Path
 
@@ -24,20 +25,45 @@ def test_questions_come_in_order_of_value(tmp_path):
         assert it.value_order == pytest.approx(it.chance_wrong * it.harm / it.cost)
 
 
-def test_limit_starts_at_8_and_is_counted_in_cost(tmp_path):
+def test_limit_starts_at_8_and_is_counted_in_questions(tmp_path):
     s = make(tmp_path)
     assert s.limit == 8
     while (q := s.current_question()) is not None:
-        assert s.running_cost + q.cost <= 8
         s.reply(q.id, "skip")
+    # 8 questions, whatever their cost: the question cost is higher than 8 by now
+    assert s.question_count == 8 and s.running_cost > 8
     assert s.at_limit() and s.limit_reached
-    need = s.view()["at_limit"]
-    assert need["questions"] == len(s.queue()) >= 1
-    assert need["cost"] == pytest.approx(sum(i.cost for i in s.queue()))
     lines = read_trace(s.trace.path)
     reached = [l for l in lines if l["event"] == "limit reached"]
-    assert len(reached) == 1 and "at least" in reached[0]["value"]
+    assert len(reached) == 1 and reached[0]["value"].startswith("limit 8 questions; at least 1 more questions")
     assert lines[-1]["limit_reached"] is True
+
+
+def test_at_the_limit_the_count_is_how_many_more_questions(tmp_path):
+    s = make(tmp_path, limit=3)
+    while (q := s.current_question()) is not None:
+        s.reply(q.id, "skip")
+    need = s.view()["at_limit"]
+    assert s.question_count == 3
+    assert need["questions"] == len(s.queue()) == 6  # 9 asked with the limit off, so at least 6 more
+    assert need["cost"] == pytest.approx(sum(i.cost for i in s.queue()))  # kept for the trace, not shown
+
+
+def test_ordering_by_value_within_the_limit(tmp_path):
+    s = make(tmp_path, limit=None)
+    order = [it.id for it in s.queue()]
+    t = make(tmp_path / "b", limit=4)
+    asked = []
+    while (q := t.current_question()) is not None:
+        asked.append(q.id)
+        t.reply(q.id, "skip")
+    assert asked == order[:4]
+
+
+@pytest.mark.parametrize("bad", ["2.5", "-1", "lots"])
+def test_the_limit_is_a_whole_number_of_questions(tmp_path, bad):
+    with pytest.raises(ValueError):
+        Session(ROTA, "", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, limit=bad)
 
 
 def test_continue_raises_the_limit(tmp_path):
@@ -45,7 +71,7 @@ def test_continue_raises_the_limit(tmp_path):
     while (q := s.current_question()) is not None:
         s.reply(q.id, "skip")
     s.limit_choice("continue")
-    assert s.limit == 16
+    assert s.limit == 16 and s.question_count == 8
     assert s.current_question() is not None
 
 

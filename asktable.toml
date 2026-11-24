@@ -57,9 +57,12 @@ never_guessed = true
 ask_when_not_guessed = true
 rules = ["cost-weighted", "confidence-only", "model-decides", "always-ask"]
 
-# P9. The question limit, counted in question cost.
+# Plan change 2 (24 Nov 2026), replacing P9's person-facing wording. The question limit is a
+# number of questions and starts at 8. Question cost stays inside the rule, the gap trace and
+# the "why this question" panel.
 [limit]
 start = 8
+unit = "questions"
 
 # P2. The rules. Each has one threshold. The five settings are fixed before any run.
 [rules.cost-weighted]

@@ -51,8 +51,8 @@ def write_brief(session: "Session") -> str:
         lines.append("")
     lines.append(
         f"Written by ElicitAgent on {time.strftime('%d %b %Y %H:%M')}. Run {session.run}. Rule: {session.run_label}. "
-        f"Questions asked: {session.question_count}, question cost {session.running_cost:g}."
-        + (f" Question limit: {session.limit:g}." if session.limit is not None else " No question limit.")
+        f"Questions asked: {session.question_count}."
+        + (f" Question limit: {session.limit} questions." if session.limit is not None else " No question limit.")
         + (" The person stopped at the limit." if session.stopped else "")
     )
     if session.model.kind == "simulated":

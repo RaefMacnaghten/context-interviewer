@@ -237,7 +237,7 @@ class Handler(BaseHTTPRequestHandler):
                 limit = None
             s = Session(folder_path, intent, model, rule=body.get("rule") or "cost-weighted",
                         threshold=float(threshold) if threshold not in (None, "") else None,
-                        limit=limit if limit in (None, "default") else float(limit))
+                        limit=limit)
         except ModelError as exc:
             return self._error(scrub(str(exc)))
         except ValueError as exc:

@@ -306,7 +306,7 @@ def test_a_goal_under_another_heading_is_still_found(tmp_path):
 
 
 def test_stopping_at_the_limit_leaves_the_intent_clash_open(tmp_path):
-    s = Session(ROTA, "Draft the rota only.", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, limit=0.5).start()
+    s = Session(ROTA, "Draft the rota only.", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, limit=0).start()
     assert s.at_limit()
     s.limit_choice("stop")
     goal = s.items[0]
