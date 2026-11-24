@@ -42,10 +42,13 @@ wide = { confirm = 0.25, choose = 1, open = 4 }
 choose_min_candidates = 2
 choose_max_candidates = 4
 
-# Small thing 4 and P3. A personal fact about a named person is always asked as
-# an open question, and is never guessed: when the rule says do not ask, it is left open.
+# Small thing 4 and P3. A personal fact about a named person is never guessed: when the rule
+# says do not ask, it is left open (or asked, if it must hold).
+# Plan change 3 (24 Nov 2026), replacing "always open" in P5: when a file holds a candidate
+# value, it is asked as a confirm or choose question that shows the passage; an open question
+# only when nothing is documented. always_open = true would restore the old P5 behaviour.
 [named_person]
-always_open = true
+always_open = false
 never_guessed = true
 
 # Plan change 1 (24 Nov 2026). The must-hold branch: an item that must hold and that the

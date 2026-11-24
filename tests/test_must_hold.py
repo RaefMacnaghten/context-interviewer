@@ -34,7 +34,7 @@ def table():
 def test_must_hold_and_not_guessed_is_asked(table, gap, why):
     d = table.decide(gap, "cost-weighted", 1)
     assert d.way == "ask" and d.asks
-    assert d.reason == f"Asked: must hold and cannot be guessed ({why})."
+    assert d.reason.startswith(f"Asked: must hold and cannot be guessed ({why}).")
 
 
 @pytest.mark.parametrize(

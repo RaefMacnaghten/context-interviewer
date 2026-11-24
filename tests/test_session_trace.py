@@ -77,8 +77,9 @@ def test_replies_count_cost_and_are_traced(session):
     assert first.state == "confirmed" and first.source == "person"
     assert second.state == "open"
     assert third.state == "not available here" and third.way == "not available here" and third.who_could == "someone"
-    events = [l["event"] for l in read_trace(session.trace.path)]
-    assert events[-3:] == ["answer", "skip", "I can't answer this"]
+    ids = {it.id for it in done}
+    events = [l["event"] for l in read_trace(session.trace.path) if l["item"] in ids and l["event"] != "decided"]
+    assert events == ["answer", "skip", "I can't answer this"]
     last = read_trace(session.trace.path)[-1]
     assert last["question_count"] == 3 + asked_clash
 
@@ -93,10 +94,13 @@ def test_brief_is_written_and_labelled_simulated(session):
     assert "Setup start time" in text
 
 
-def test_named_person_items_are_open_questions(session):
-    for it in session.items:
-        if it.named_person and it.way == "ask":
-            assert it.kind == "open"
+def test_named_person_items_are_asked_by_what_the_files_hold(session):
+    # plan change 3: confirm with one documented value, choose with two to four, open only with none
+    asked = [it for it in session.items if it.named_person and it.way == "ask" and not it.sources]
+    assert asked
+    for it in asked:
+        n = len(it.candidates)
+        assert it.kind == ("confirm" if n == 1 else "choose" if 2 <= n <= 4 else "open")
 
 
 def test_stated_value_must_show_its_numbers_in_the_passage():

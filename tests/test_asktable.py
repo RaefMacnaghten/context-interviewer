@@ -60,7 +60,9 @@ def test_harm_bands(table, can_undo, would_notice, band, harm):
         (5, False, False, "open", 2),
         (0, False, False, "open", 2),
         (1, False, True, "choose", 1),  # a clash is a choose
-        (1, True, False, "open", 2),  # a named person is always open
+        (1, True, False, "confirm", 0.5),  # a named person: confirm what a file holds (plan change 3)
+        (3, True, False, "choose", 1),  # two to four documented values: choose
+        (0, True, False, "open", 2),  # nothing documented: open
         (3, True, True, "choose", 1),  # a clash about a named person still shows both sides (P11)
     ],
 )
@@ -125,7 +127,7 @@ def test_p3_low_harm_asked_only_as_confirm_and_only_when_at_least_as_likely_wron
 
 def test_p3_named_person_never_guessed(table):
     # low harm, open question too dear: not asked, and left open rather than guessed
-    d = table.decide(Gap(0.6, True, True, candidates=1, named_person=True), "cost-weighted", 1)
+    d = table.decide(Gap(0.6, True, True, candidates=0, named_person=True), "cost-weighted", 1)
     assert not d.asks
     assert d.way == "wait"
     assert d.kind == "open"
@@ -134,9 +136,24 @@ def test_p3_named_person_never_guessed(table):
     assert d2.way == "wait"
 
 
-def test_named_person_asked_as_open_question(table):
-    d = table.decide(Gap(0.9, True, False, candidates=1, named_person=True), "cost-weighted", 1)
-    assert d.asks and d.kind == "open" and d.cost == 2
+@pytest.mark.parametrize("candidates, kind", [(1, "confirm"), (2, "choose"), (4, "choose"), (0, "open"), (5, "open")])
+def test_named_person_asked_by_what_the_files_hold(table, candidates, kind):
+    d = table.decide(Gap(0.9, True, False, candidates=candidates, named_person=True), "cost-weighted", 1)
+    assert d.asks and d.kind == kind and d.cost == table.cost[kind]
+
+
+@pytest.mark.parametrize("candidates", [0, 1, 2, 4, 5])
+@pytest.mark.parametrize("rule", ["cost-weighted", "confidence-only", "model-decides", "always-ask", "never-ask"])
+@pytest.mark.parametrize("must_hold", [True, False])
+def test_named_person_is_never_guessed(table, candidates, rule, must_hold):
+    for p in (0.01, 0.5, 0.99):
+        gap = Gap(p, True, True, candidates=candidates, named_person=True, must_hold=must_hold, model_would_ask=False)
+        assert table.decide(gap, rule).way != "guess and mark it"
+
+
+def test_old_always_open_is_a_setting(table):
+    old = AskTable({**table.data, "named_person": {**table.named_person, "always_open": True}})
+    assert old.decide(Gap(0.9, True, False, candidates=1, named_person=True), "cost-weighted", 1).kind == "open"
 
 
 # ------------------------------------------------------------------ P4 when it waits

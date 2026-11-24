@@ -82,13 +82,21 @@ class AskTable:
     def question_kind(self, candidates: int, named_person: bool, conflict: bool) -> str:
         if conflict:  # P11: a clash shows both sides, even about a named person
             return "choose"
-        if named_person and self.named_person.get("always_open", True):
+        if named_person and self.named_person.get("always_open", False):
             return "open"
         if candidates == 1:
             return "confirm"
         if self.kinds["choose_min_candidates"] <= candidates <= self.kinds["choose_max_candidates"]:
             return "choose"
         return "open"
+
+    @staticmethod
+    def named_person_note(kind: str) -> str:
+        if kind == "confirm":
+            return " a file holds a value, so you confirm it."
+        if kind == "choose":
+            return " the files hold more than one value, so you choose."
+        return " nothing is documented, so it is an open question."
 
     def must_hold_applies(self, rule: str) -> bool:
         return bool(self.must_hold.get("ask_when_not_guessed", False)) and rule in self.must_hold.get("rules", [])
@@ -132,7 +140,7 @@ class AskTable:
         if asks:
             way = "ask"
             if rule == "cost-weighted":
-                reason = f"Asked: a guess here is about {pct} likely to be wrong and the harm is {band}, which outweighs a {kind} question."
+                reason = f"Asked: a guess here is about {pct} likely to be wrong and the harm is {band}, which outweighs {"an" if kind == "open" else "a"} {kind} question."
             elif rule == "confidence-only":
                 reason = f"Asked: a guess here is about {pct} likely to be wrong, at or above the {threshold:g} line."
             elif rule == "model-decides":
@@ -140,7 +148,7 @@ class AskTable:
             else:
                 reason = "Asked: this rule asks every item."
             if gap.named_person:
-                reason += " It is about a named person, so it is an open question."
+                reason += " It is a personal fact about a named person, so it is never guessed;" + self.named_person_note(kind)
         elif gap.named_person and self.named_person.get("never_guessed", True):
             way, why = "wait", "personal facts about a named person are never guessed"
             reason = "Left open: personal facts about a named person are never guessed."
@@ -152,11 +160,13 @@ class AskTable:
             reason = "Left open: there is nothing to guess from."
         else:
             way = "guess and mark it"
-            reason = f"Guessed and marked: about {pct} likely to be wrong with {band} harm, not worth a {kind} question."
+            reason = f"Guessed and marked: about {pct} likely to be wrong with {band} harm, not worth {"an" if kind == "open" else "a"} {kind} question."
         if way == "wait" and gap.must_hold and self.must_hold_applies(rule):
             # plan change 1: what must hold and will not be guessed is asked now, not left for the agent
             way, asks = "ask", True
             reason = f"Asked: must hold and cannot be guessed ({why})."
+            if gap.named_person:
+                reason += " " + self.named_person_note(kind).strip().capitalize()
         return Decision(
             way=way,
             asks=asks,
