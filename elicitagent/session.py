@@ -371,17 +371,29 @@ class Session:
         it.harm_band, it.harm, it.reason, it.value_order = d.harm_band, d.harm, d.reason, d.value
         conflict = it.state == "conflict"
         disagree = disagreement(it)
-        if conflict and d.way != "guess and mark it":
-            it.reason = d.reason + f" {disagree[0].upper()}{disagree[1:]}."
-        if d.way == "ask":
+        if conflict:
+            # P11: a clash is settled by a choose question that shows both sides, whatever the rule's arithmetic
+            # says. It is never guessed. Under the never-ask test rule nothing is asked, so it stays a conflict.
+            sides = f"{disagree[0].upper()}{disagree[1:]}"
+            if self.rule == "never-ask":
+                it.way = "wait"
+                it.reason = f"Left open: {disagree}, a clash is never guessed, and the never-ask rule asks nothing."
+            else:
+                it.way = "ask"
+                if d.way == "ask":
+                    it.reason = d.reason + f" {sides}."
+                else:
+                    it.reason = f"Asked: {disagree}. A clash is always asked, whatever the rule's arithmetic says."
+            d_way = it.way
+        else:
+            d_way = d.way
+        if d_way == "ask":
             it.pending = True
             if not conflict:
                 it.state = "open"
-        elif d.way == "guess and mark it":
+        elif d_way == "guess and mark it":
             it.state, it.source = "assumed", "guess"
-            if conflict:
-                it.reason = d.reason + f" {disagree[0].upper()}{disagree[1:]}; it took {it.value}."
-        elif d.way == "wait":
+        elif d_way == "wait":
             it.state = "conflict" if conflict else "open"
 
     # ------------------------------------------------------------ questions
@@ -430,11 +442,12 @@ class Session:
                 it.pending = False
                 # P8: anything that cannot be undone is left open, and so is any fact about a named person;
                 # the rest is guessed and marked. With nothing to guess from, it is left open too.
-                if it.ask_first or not it.can_undo or it.named_person or not it.value:
+                if it.ask_first or it.sources or not it.can_undo or it.named_person or not it.value:
                     it.way = "wait"
                     it.state = "conflict" if it.sources else "open"
                     it.reason = "Left open when you stopped at the limit: " + (
                         "what you typed and the folder disagree about the goal, and only you can settle it." if it.ask_first
+                        else "the documents disagree, and a clash is never guessed." if it.sources
                         else "a wrong guess could not be undone." if not it.can_undo
                         else "personal facts about a named person are never guessed." if it.named_person
                         else "there is nothing to guess from.")
@@ -609,6 +622,7 @@ class Session:
             "decided": decided,
             "history": [{"event": l["event"], "value": l["value"], "time": l["time"], "question_count": l["question_count"],
                          "running_cost": l["running_cost"]} for l in lines if l["event"] != "decided"],
+            "clash": bool(it.sources),
             "rule_label": rule.get("label", self.rule),
             "rule_test": rule.get("test", ""),
             "threshold_name": rule.get("threshold_name"),

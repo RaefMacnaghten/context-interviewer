@@ -193,6 +193,7 @@ async function renderWhy(container, itemId) {
     el("p", { class: "why-title" }, "Why this question (read-only, from the gap trace)"),
     el("dl", { class: "why-list" }, rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)])),
     working ? el("p", { class: "why-working" }, working) : null,
+    data.clash && d.way === "ask" ? el("p", { class: "why-working" }, "A clash is always asked, whatever this arithmetic says: the plan settles a clash by a choose question that shows both sides.") : null,
     el("p", { class: "why-reason" }, d.reason),
     el("p", { class: "muted small-note" }, `Order of value: (chance wrong x harm) / cost = ${num(d.chance_wrong * d.harm / d.question_cost)}. Higher comes first.`),
   );

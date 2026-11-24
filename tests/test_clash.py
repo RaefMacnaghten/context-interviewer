@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+import pytest
+
 from elicitagent.models import SimulatedModel
 from elicitagent.session import Item, Session, merge_clashes
 from elicitagent.trace import read_trace
@@ -59,3 +61,28 @@ def test_skipped_clash_stays_in_conflict_and_is_in_ask_first(tmp_path):
     text = s.finish().read_text()
     ask_first = text.split("## Ask first")[1].split("## Not available here")[0]
     assert "the documents disagree" in ask_first
+
+
+@pytest.mark.parametrize("rule, threshold", [("cost-weighted", 4), ("cost-weighted", 0.25), ("confidence-only", 0.5),
+                                             ("model-decides", None), ("always-ask", None)])
+def test_a_clash_is_always_asked_whatever_the_arithmetic(tmp_path, rule, threshold):
+    # At k = 4 the arithmetic alone (0.5 x 3 against 4 x 1) would guess the clash and mark it assumed.
+    s = Session(ROTA, "", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, rule=rule, threshold=threshold).start()
+    clash = next(it for it in s.items if it.sources)
+    assert clash.way == "ask" and clash.pending and clash.kind == "choose" and clash.state == "conflict"
+    assert clash.source != "guess"
+
+
+def test_never_ask_leaves_a_clash_open_rather_than_guess(tmp_path):
+    s = Session(ROTA, "", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, rule="never-ask").start()
+    clash = next(it for it in s.items if it.sources)
+    assert clash.way == "wait" and clash.state == "conflict" and not clash.pending and clash.source != "guess"
+    assert "never guessed" in clash.reason
+
+
+def test_stopping_at_the_limit_leaves_a_clash_open(tmp_path):
+    s = Session(ROTA, "", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, limit=0).start()
+    assert s.at_limit()
+    s.limit_choice("stop")
+    clash = next(it for it in s.items if it.sources)
+    assert clash.state == "conflict" and clash.way == "wait" and "never guessed" in clash.reason
