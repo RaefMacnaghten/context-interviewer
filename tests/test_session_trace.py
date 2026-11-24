@@ -237,7 +237,7 @@ def test_the_real_model_receives_the_intent_in_all_three_calls():
     seen = []
     model = AnthropicModel("claude-test", client=object())
     replies = iter([{"items": []}, {"results": []}, {"estimates": []}])
-    model._call = lambda system, user, schema: (seen.append(user), next(replies))[1]
+    model._call = lambda system, user, schema, on_text=None: (seen.append(user), next(replies))[1]
     folder = read_folder(ROTA)
     model.list_items("Make the rota.", folder)
     model.second_look("Make the rota.", folder, [{"id": "a", "heading": "Times", "label": "x"}])
@@ -264,7 +264,7 @@ class _GoalModel(SimulatedModel):
         super().__init__(ROTA.parent / "simulated-model.json")
         self.goals = goals
 
-    def list_items(self, intent, folder):
+    def list_items(self, intent, folder, on_partial=None):
         return self.goals + [i for i in super().list_items(intent, folder) if i["key"] != "goal"]
 
 
@@ -318,3 +318,48 @@ def test_a_task_folder_path_means_its_materials_so_the_answer_sheet_is_never_rea
 
     assert resolve_folder("tasks/rota") == ROTA.resolve()
     assert resolve_folder("tasks/rota/materials") == ROTA.resolve()
+
+
+def test_partial_replies_count_only_finished_objects():
+    from elicitagent.models import complete_objects
+
+    buf = '{"items": [{"id": "a", "label": "x {y}"}, {"id": "b", "label": "a \\"quote\\" and }"}, {"id": "c", "lab'
+    assert [o["id"] for o in complete_objects(buf, "items")] == ["a", "b"]
+    assert complete_objects('{"results": [', "results") == [] and complete_objects("", "items") == []
+
+
+def test_error_text_never_shows_a_key_or_header():
+    from elicitagent.models import scrub
+
+    out = scrub("bad key sk-ant-api03-abcdefghijklmnop and x-api-key: sk-ant-zzzzzzzzzz Authorization=Bearer abc")
+    assert "sk-ant" not in out and "abcdefghij" not in out and "Bearer" not in out and "abc" not in out.replace("abcd", "")
+
+
+
+def test_progress_reports_every_step_with_real_counts(session):
+    p = session.progress
+    assert session.status == "ready" and p["current"] is None
+    assert [st["key"] for st in p["steps"]] == ["read", "first", "clash", "second", "estimate"]
+    assert all(st["state"] == "done" and st["started"] and st["ended"] for st in p["steps"])
+    read = p["steps"][0]
+    assert read["n"] == read["of"] == 5 and read["summary"] == "5 read, 0 skipped"
+    assert {f["name"] for f in p["files"]} == {"event-plan.md", "hall-email.txt", "last-year-notes.txt",
+                                               "roles-and-rules.md", "volunteers.csv"}
+    assert sum(f["items"] for f in p["files"]) > 0
+    assert p["steps"][2]["summary"] == "1 clash found"
+    second = p["steps"][3]
+    assert second["of"] and second["n"] == second["of"] and second["summary"].startswith("1 of ")
+
+
+def test_a_failed_model_call_becomes_a_plain_error_not_a_crash(tmp_path):
+    from elicitagent.models import ModelError
+
+    class Failing(SimulatedModel):
+        def second_look(self, *a, **k):
+            raise ModelError("The model service refused the call (status 401): invalid x-api-key: sk-ant-secretsecret")
+
+    s = Session(ROTA, "", Failing(ROTA.parent / "simulated-model.json"), runs_dir=tmp_path).start_safely()
+    assert s.status == "failed" and "status 401" in s.error and "sk-ant" not in s.error and "secret" not in s.error
+    second = next(st for st in s.progress["steps"] if st["key"] == "second")
+    assert second["state"] == "failed"
+    assert s.view()["status"] == "failed" and s.view()["question"] is None

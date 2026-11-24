@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 from abc import ABC, abstractmethod
 from pathlib import Path
 
@@ -34,28 +35,76 @@ class ModelError(RuntimeError):
     pass
 
 
+def scrub(text: str) -> str:
+    """Error text shown to the person: never a key, and never a request header."""
+    text = re.sub(r"sk-[A-Za-z0-9_\-]{6,}", "[hidden]", str(text))
+    return re.sub(r"(?i)(x-api-key|authorization)\s*[:=]\s*[^\n,;]+", r"\1: [hidden]", text)
+
+
+def complete_objects(buf: str, key: str) -> list[dict]:
+    """The objects already complete in the JSON array under `key` in a reply that is still arriving.
+
+    The model's reply streams in as text. Each finished object in the array is real progress (an item listed,
+    an item looked for again, a gap estimated); an unfinished one is not counted.
+    """
+    m = re.search(r'"%s"\s*:\s*\[' % re.escape(key), buf)
+    if not m:
+        return []
+    out, depth, start, in_str, esc = [], 0, None, False, False
+    for j in range(m.end(), len(buf)):
+        c = buf[j]
+        if in_str:
+            if esc:
+                esc = False
+            elif c == "\\":
+                esc = True
+            elif c == '"':
+                in_str = False
+            continue
+        if c == '"':
+            in_str = True
+        elif c == "{":
+            if depth == 0:
+                start = j
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0 and start is not None:
+                try:
+                    out.append(json.loads(buf[start:j + 1]))
+                except json.JSONDecodeError:
+                    pass
+                start = None
+        elif c == "]" and depth == 0:
+            break
+    return out
+
+
 class Model(ABC):
     name: str  # what the gap trace records in its "model" field
     kind: str  # "real" or "simulated"
 
     @abstractmethod
-    def list_items(self, intent: str, folder: Folder) -> list[dict]:
+    def list_items(self, intent: str, folder: Folder, on_partial=None) -> list[dict]:
         """Items under the eight headings and "other", with stated or inferred, must hold or nice, and sources.
 
         One of them is the goal (heading "Goal and deliverable", key "goal"), with agrees_with_intent: True or
-        False when the person gave an intent, None when they did not.
+        False when the person gave an intent, None when they did not. on_partial(items so far) is called as the
+        reply arrives, so the page can show items as they come.
         """
 
     @abstractmethod
-    def second_look(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict | None]:
+    def second_look(self, intent: str, folder: Folder, items: list[dict], on_partial=None) -> dict[str, dict | None]:
         """One targeted second look in the folder for each item the first look did not find.
 
-        Per item id: {"value", "document", "passage"} when the folder states it, else None.
+        Per item id: {"value", "document", "passage"} when the folder states it, else None. on_partial(number of
+        items answered so far) is called as the reply arrives.
         """
 
     @abstractmethod
-    def estimate(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
-        """Per item id: chance_wrong (0 to 1), can_undo, would_notice, model_would_ask."""
+    def estimate(self, intent: str, folder: Folder, items: list[dict], on_partial=None) -> dict[str, dict]:
+        """Per item id: chance_wrong (0 to 1), can_undo, would_notice, model_would_ask. on_partial(number of gaps
+        estimated so far) is called as the reply arrives."""
 
 
 # ---------------------------------------------------------------- simulated
@@ -79,7 +128,7 @@ class SimulatedModel(Model):
         """Convention: the script lives next to the materials folder, as simulated-model.json."""
         return cls(Path(folder_path).resolve().parent / "simulated-model.json")
 
-    def list_items(self, intent: str, folder: Folder) -> list[dict]:
+    def list_items(self, intent: str, folder: Folder, on_partial=None) -> list[dict]:
         # The stand-in cannot judge meaning. Its goal item lists the intents it was written for
         # ("goal_agrees_with"); it counts those as agreeing with the folder's goal and any other as differing.
         out = []
@@ -90,14 +139,20 @@ class SimulatedModel(Model):
                 agrees = _plain(intent) in {_plain(x) for x in raw["goal_agrees_with"]}
             item["agrees_with_intent"] = agrees
             out.append(item)
+        if on_partial:
+            on_partial(out)
         return out
 
-    def second_look(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict | None]:
+    def second_look(self, intent: str, folder: Folder, items: list[dict], on_partial=None) -> dict[str, dict | None]:
         found = self.script.get("second_look", {})
+        if on_partial:
+            on_partial(len(items))
         return {item["id"]: found.get(item["id"]) for item in items}
 
-    def estimate(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
+    def estimate(self, intent: str, folder: Folder, items: list[dict], on_partial=None) -> dict[str, dict]:
         by_id = {raw["id"]: raw.get("estimate", {}) for raw in self.script["items"]}
+        if on_partial:
+            on_partial(len(items))
         return {item["id"]: by_id.get(item["id"], {}) for item in items}
 
 
@@ -261,7 +316,7 @@ class AnthropicModel(Model):
             client = anthropic.Anthropic()
         self.client = client
 
-    def _call(self, system: str, user: str, schema: dict) -> dict:
+    def _call(self, system: str, user: str, schema: dict, on_text=None) -> dict:
         kwargs = dict(
             model=self.name,
             max_tokens=64000,
@@ -279,12 +334,18 @@ class AnthropicModel(Model):
 
         try:
             with stream_ctx as stream:
+                if on_text is not None:
+                    buf = ""
+                    for text in stream.text_stream:
+                        buf += text
+                        if "}" in text:
+                            on_text(buf)
                 message = stream.get_final_message()
         except anthropic.APIStatusError as exc:
             # status and the API's own message only: never headers or the request
-            raise ModelError(f"The API refused the call ({exc.status_code}): {exc.message}") from None
+            raise ModelError(scrub(f"The model service refused the call (status {exc.status_code}): {exc.message}")) from None
         except anthropic.APIConnectionError:
-            raise ModelError("Could not reach the API.") from None
+            raise ModelError("Could not reach the model service. Check the connection and try again.") from None
         if message.stop_reason == "refusal":
             raise ModelError("The model declined this request.")
         if message.stop_reason == "max_tokens":
@@ -297,12 +358,13 @@ class AnthropicModel(Model):
         except json.JSONDecodeError as exc:
             raise ModelError(f"The model returned invalid JSON: {exc}") from exc
 
-    def list_items(self, intent: str, folder: Folder) -> list[dict]:
+    def list_items(self, intent: str, folder: Folder, on_partial=None) -> list[dict]:
         system = LIST_SYSTEM.format(headings=", ".join(f'"{h}"' for h in ALL_HEADINGS))
         user = f"{_intent_block(intent)}\n\nThe folder:\n{_folder_as_text(folder)}"
-        return self._call(system, user, LIST_SCHEMA)["items"]
+        on_text = (lambda buf: on_partial(complete_objects(buf, "items"))) if on_partial else None
+        return self._call(system, user, LIST_SCHEMA, on_text)["items"]
 
-    def second_look(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict | None]:
+    def second_look(self, intent: str, folder: Folder, items: list[dict], on_partial=None) -> dict[str, dict | None]:
         if not items:
             return {}
         slim = [{k: item.get(k) for k in ("id", "heading", "label")} for item in items]
@@ -310,14 +372,15 @@ class AnthropicModel(Model):
             f"{_intent_block(intent)}\n\nThe folder:\n{_folder_as_text(folder)}\n\n"
             f"Look again for each of these items:\n{json.dumps(slim, indent=1)}"
         )
-        data = self._call(SECOND_LOOK_SYSTEM, user, SECOND_LOOK_SCHEMA)
+        on_text = (lambda buf: on_partial(len(complete_objects(buf, "results")))) if on_partial else None
+        data = self._call(SECOND_LOOK_SYSTEM, user, SECOND_LOOK_SCHEMA, on_text)
         out: dict[str, dict | None] = {item["id"]: None for item in items}
         for r in data["results"]:
             if r.get("id") in out and r.get("found") and r.get("value") and r.get("document") and r.get("passage"):
                 out[r["id"]] = {"value": r["value"], "document": r["document"], "passage": r["passage"]}
         return out
 
-    def estimate(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
+    def estimate(self, intent: str, folder: Folder, items: list[dict], on_partial=None) -> dict[str, dict]:
         slim = [
             {k: item.get(k) for k in ("id", "heading", "label", "value", "candidates", "stated", "document", "passage", "about_named_person")}
             for item in items
@@ -326,7 +389,8 @@ class AnthropicModel(Model):
             f"{_intent_block(intent)}\n\nThe folder:\n{_folder_as_text(folder)}\n\n"
             f"The items:\n{json.dumps(slim, indent=1)}"
         )
-        data = self._call(ESTIMATE_SYSTEM, user, ESTIMATE_SCHEMA)
+        on_text = (lambda buf: on_partial(len(complete_objects(buf, "estimates")))) if on_partial else None
+        data = self._call(ESTIMATE_SYSTEM, user, ESTIMATE_SCHEMA, on_text)
         return {e["id"]: e for e in data["estimates"]}
 
 

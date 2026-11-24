@@ -17,7 +17,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .asktable import AskTable
 from .documents import survey
-from .models import ModelError, make_model
+from .models import ModelError, make_model, scrub
 from .session import REPO_ROOT, Session
 
 WEB_DIR = Path(__file__).resolve().parent / "web"
@@ -217,13 +217,16 @@ class Handler(BaseHTTPRequestHandler):
                 limit = None
             s = Session(folder_path, intent, model, rule=body.get("rule") or "cost-weighted",
                         threshold=float(threshold) if threshold not in (None, "") else None,
-                        limit=limit if limit in (None, "default") else float(limit)).start()
+                        limit=limit if limit in (None, "default") else float(limit))
         except ModelError as exc:
-            return self._error(str(exc))
+            return self._error(scrub(str(exc)))
         except ValueError as exc:
             return self._error(str(exc))
+        # Reading runs in the background; the page polls the session and shows each step as it really happens.
+        s._progress_init()
         with LOCK:
             SESSIONS[s.id] = s
+        threading.Thread(target=s.start_safely, daemon=True).start()
         return self._send_json(s.view())
 
 

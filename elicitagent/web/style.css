@@ -215,3 +215,15 @@ form .row { margin-bottom: 10px; }
 .tree-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 2fr); gap: 8px; font-size: 13px; padding: 2px 0; }
 .tree-name { font-family: ui-monospace, monospace; overflow-wrap: anywhere; }
 .tree-status.skip { color: var(--muted); }
+
+/* change 3: reading progress (restyled in change 4) */
+.read-steps { list-style: none; padding: 0; margin: 8px 0; }
+.read-step { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.read-step.todo { color: var(--muted); }
+.read-mark { font-weight: 700; }
+.read-count { margin-left: 8px; font-size: 12px; color: var(--muted); font-weight: 400; }
+.read-detail { font-size: 12.5px; color: var(--muted); }
+.read-files { font-size: 12.5px; margin: 8px 0; }
+.read-file { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; padding: 3px 0; }
+.read-file.head { font-weight: 600; }
+.callout.bad { border: 1px solid #b3352b; background: #fbe3e0; color: #7a1d16; padding: 8px 10px; border-radius: 8px; }

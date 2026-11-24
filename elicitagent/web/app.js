@@ -66,6 +66,7 @@ async function init() {
       $("#start").hidden = true;
       $("#interview").hidden = false;
       render();
+      if (view.status === "reading") poll();
     } catch (e) {
       location.hash = "";
     }
@@ -141,15 +142,15 @@ async function start(ev) {
   const folder = $("#folder-input").value.trim() || $("#task-select").value;
   const button = $("#start-form button[type=submit]");
   button.disabled = true;
-  button.textContent = "Reading the folder. With a real model this takes a minute or two.";
+  lastStart = {
+    folder,
+    intent: $("#intent-input").value,
+    rule: $("#rule-select").value,
+    model: $("#model-select").value,
+    limit: $("#limit-input").value.trim() || "none",
+  };
   try {
-    view = await api("/api/session", {
-      folder,
-      intent: $("#intent-input").value,
-      rule: $("#rule-select").value,
-      model: $("#model-select").value,
-      limit: $("#limit-input").value.trim() || "none",
-    });
+    view = await api("/api/session", lastStart);
   } catch (e) {
     err.textContent = e.message;
     err.hidden = false;
@@ -157,10 +158,102 @@ async function start(ev) {
     button.textContent = "Read the folder";
     return;
   }
+  button.disabled = false;
   location.hash = `s=${view.id}`;
   $("#start").hidden = true;
   $("#interview").hidden = false;
   render();
+  if (view.status === "reading") poll();
+}
+
+// ---------------------------------------------------------------- reading (change 3)
+
+// The page asks the server how far reading has got, about twice a second, and shows exactly that: which step is
+// running, which file, how many items are back. Nothing is estimated in the browser except the seconds ticking
+// between two answers from the server.
+let lastStart = null;
+let pollTimer = null;
+let viewAt = 0;
+async function poll() {
+  clearTimeout(pollTimer);
+  try {
+    view = await api(`/api/session/${view.id}`);
+    viewAt = Date.now();
+  } catch (e) {
+    view = { ...view, status: "failed", error: `Lost contact with the tool: ${e.message}` };
+  }
+  render();
+  if (view.status === "reading") pollTimer = setTimeout(poll, 500);
+}
+
+function elapsed(st) {
+  if (st.seconds === null || st.seconds === undefined) return "";
+  const extra = st.state === "on" && viewAt ? (Date.now() - viewAt) / 1000 : 0;
+  return `${Math.floor(st.seconds + extra)} s`;
+}
+
+function renderReading(pane) {
+  const p = view.progress;
+  const failed = view.status === "failed";
+  const files = p.files || [];
+  const listed = view.items.length;
+  pane.append(el("p", { class: "pane-title" }, failed ? "Reading stopped" : "Reading the folder"));
+  if (failed) {
+    pane.append(
+      el("div", { class: "callout bad", role: "alert" }, view.error || "Something went wrong."),
+      el("p", { class: "muted small-note" }, "Nothing was guessed. No question was asked. Your folder was not changed."),
+      el("div", { class: "replies" },
+        el("button", { class: "primary", onclick: retry }, "Try again"),
+        el("button", { onclick: backToStart }, "Choose another folder")));
+  }
+  const list = el("ol", { class: "read-steps" });
+  for (const st of p.steps) {
+    const count = st.of ? ` ${st.n ?? 0} of ${st.of}` : (st.n !== null && st.n !== undefined && st.key === "first" ? ` ${st.n} items` : "");
+    list.append(el("li", { class: `read-step ${st.state}` },
+      el("span", { class: "read-mark", "aria-hidden": "true" }, st.state === "done" ? "✓" : st.state === "failed" ? "!" : st.state === "on" ? "…" : ""),
+      el("div", { class: "read-body" },
+        el("div", { class: "read-label" }, st.label,
+          st.state === "on" ? el("span", { class: "read-count" }, `${count}${count ? " · " : " "}${elapsed(st)}`) : null,
+          st.state === "done" ? el("span", { class: "read-count" }, `${st.summary} · ${elapsed(st)}`) : null),
+        st.state === "on" || st.state === "failed" ? el("div", { class: "read-detail" }, st.detail) : null)));
+  }
+  pane.append(list);
+  if (files.length) {
+    const table = el("div", { class: "read-files", role: "table", "aria-label": "Files" },
+      el("div", { class: "read-file head", role: "row" }, el("span", {}, "File"), el("span", {}, "Status")));
+    for (const f of files) {
+      table.append(el("div", { class: `read-file ${f.read ? "read" : "skip"}`, role: "row" },
+        el("span", { class: "fn" }, f.name),
+        el("span", {}, f.read ? (f.items ? `Read. ${f.items} ${f.items === 1 ? "item" : "items"}` : "Read") : `Not read: ${f.reason}`)));
+    }
+    pane.append(table);
+  }
+  if (!failed) {
+    pane.append(el("p", { class: "muted small-note" },
+      `So far: ${listed} ${listed === 1 ? "item" : "items"} on the right, each with its document and exact passage. ` +
+      "No question is asked until reading is finished."));
+  }
+}
+
+async function retry() {
+  if (!lastStart) return backToStart();
+  try {
+    view = await api("/api/session", lastStart);
+  } catch (e) {
+    view = { ...view, status: "failed", error: e.message };
+    render();
+    return;
+  }
+  location.hash = `s=${view.id}`;
+  render();
+  if (view.status === "reading") poll();
+}
+
+function backToStart() {
+  clearTimeout(pollTimer);
+  location.hash = "";
+  $("#interview").hidden = true;
+  $("#start").hidden = false;
 }
 
 // ---------------------------------------------------------------- interview
@@ -295,6 +388,16 @@ function render() {
   badge.className = "badge " + (view.model_kind === "simulated" ? "sim" : "real");
   badge.textContent = view.model_kind === "simulated" ? "Simulated model" : `Model: ${view.model}`;
   $("#run-label").textContent = `Run ${view.run} · ${view.run_label}`;
+  if (view.status === "reading" || view.status === "failed") {
+    const pane = $("#question-pane");
+    pane.replaceChildren();
+    renderReading(pane);
+    $("#progress-pane").replaceChildren();
+    $("#progress-pane").hidden = true;
+    renderItems();
+    return;
+  }
+  $("#progress-pane").hidden = false;
   renderQuestion();
   renderProgress();
   renderItems();
@@ -315,7 +418,7 @@ function renderLimit(pane) {
     el("div", { class: "replies" },
       el("button", { class: "primary", onclick: () => limitChoice("continue") }, `Continue (${config.limit_start} more)`),
       el("button", { onclick: () => limitChoice("stop") }, "Stop here")),
-    el("p", { class: "muted small-note" }, "If you stop: anything that cannot be undone, and any fact about a named person, is left open for the agent to ask; the rest is guessed and marked assumed."),
+    el("p", { class: "muted small-note" }, "If you stop: anything that cannot be undone, any fact about a named person and any clash is left open for the agent to ask; the rest is guessed and marked assumed."),
   );
 }
 
@@ -478,7 +581,7 @@ function renderItems() {
           ...(it.sources || []).map((src, n) => sourceView(`i-${it.id}-${n}`, src.document, src.passage, src.context, true)),
           editing === it.id ? editBox(it) : null,
         ),
-        editing === it.id ? null : itemControls(it),
+        editing === it.id || view.status !== "ready" ? null : itemControls(it),
         it.id === currentId ? el("span", { class: "now-tag" }, "this question") : null,
       ));
     }

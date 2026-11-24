@@ -193,6 +193,10 @@ class Session:
         self.finished = False
         self.brief_path: Path | None = None
         self.brief_text: str | None = None
+        self.status = "new"  # new, reading, ready or failed
+        self.error: str | None = None
+        self.progress: dict = {}
+        self._partial: list[Item] = []
 
     # ------------------------------------------------------------ labels
 
@@ -204,14 +208,101 @@ class Session:
 
     # ------------------------------------------------------------ start
 
+    # ------------------------------------------------------------ progress (change 3)
+
+    STEPS = [
+        ("read", "Reading the files"),
+        ("first", "First look: listing what the agent needs"),
+        ("clash", "Checking for clashes"),
+        ("second", "Second look for what is missing"),
+        ("estimate", "Estimating the gaps"),
+    ]
+
+    def _progress_init(self) -> None:
+        self.status = "reading"
+        self.error = None
+        self.progress = {
+            "steps": [{"key": k, "label": label, "state": "todo", "detail": "", "n": None, "of": None,
+                       "started": None, "ended": None, "summary": ""} for k, label in self.STEPS],
+            "files": [],
+            "current": None,
+        }
+
+    def _step(self, key: str, **kw) -> dict:
+        step = next(st for st in self.progress["steps"] if st["key"] == key)
+        if step["state"] == "todo":
+            step["state"], step["started"] = "on", time.time()
+            self.progress["current"] = key
+        step.update(kw)
+        return step
+
+    def _done(self, key: str, summary: str) -> None:
+        step = self._step(key)
+        step.update(state="done", ended=time.time(), summary=summary, detail="")
+
+    def _on_file(self, name: str, n: int, of: int, outcome) -> None:
+        from .documents import Document
+
+        read = isinstance(outcome, Document)
+        self.progress["files"].append({"name": name, "read": read, "items": 0,
+                                       "reason": None if read else outcome.reason})
+        self._step("read", n=n, of=of, detail=f"Read {name}" if read else f"Skipped {name}: {outcome.reason}")
+
+    def _on_listed(self, raws: list[dict]) -> None:
+        listed = [self._normalise(raw, i) for i, raw in enumerate(raws)]
+        for it in listed:
+            it.state = "listed"
+        self._partial = listed
+        counts: dict[str, int] = {}
+        for it in listed:
+            if it.document:
+                counts[it.document] = counts.get(it.document, 0) + 1
+        for f in self.progress["files"]:
+            f["items"] = counts.get(f["name"], 0)
+        latest = listed[-1].document if listed and listed[-1].document else None
+        self._step("first", n=len(listed), of=None,
+                   detail=f"{len(listed)} items back so far" + (f"; the latest came from {latest}" if latest else ""))
+
+    def start_safely(self) -> "Session":
+        """start(), for the web page: a failure is kept as the session's error, in plain words, never raised."""
+        from .models import ModelError, scrub
+
+        try:
+            return self.start()
+        except ModelError as exc:
+            self.error = scrub(str(exc))
+        except Exception as exc:  # anything else: say what failed, never a frozen screen
+            current = self.progress.get("current")
+            label = next((st["label"] for st in self.progress.get("steps", []) if st["key"] == current), "reading")
+            self.error = scrub(f"Something went wrong at the step \"{label}\". "
+                               f"The technical reason: {exc.__class__.__name__}: {exc}.")
+        self.status = "failed"
+        current = self.progress.get("current")
+        if current:
+            self._step(current, state="failed")
+        return self
+
+    # ------------------------------------------------------------ start
+
     def start(self) -> "Session":
-        self.folder = read_folder(self.folder_path)
+        self._progress_init()
+        self._partial = []
+        self._step("read", detail="Opening the folder")
+        self.folder = read_folder(self.folder_path, on_file=self._on_file)
+        self._done("read", f"{len(self.folder.documents)} read, {len(self.folder.skipped)} skipped")
         # First look: the model lists items with their sources; clashes between documents are merged (P11).
-        raw_items = self.model.list_items(self.intent, self.folder)
+        n_docs = len(self.folder.documents)
+        self._step("first", detail=f"The model is reading all {n_docs} documents in one call")
+        raw_items = self.model.list_items(self.intent, self.folder, on_partial=self._on_listed)
+        self._on_listed(raw_items)
+        self._done("first", f"{len(raw_items)} items listed")
+        self._step("clash", detail="Comparing items about the same thing from different documents")
         items = merge_clashes([self._normalise(raw, i) for i, raw in enumerate(raw_items)])
         # The person's intent is the first goal item. With no intent, the goal is worked out from the folder.
         if self.intent:
             items = self._with_intent(items)
+        clashes = sum(1 for it in items if it.state == "conflict")
+        self._done("clash", f"{clashes} clash{'es' if clashes != 1 else ''} found")
         # Reading the folder comes before the ask table. An item the folder states is filled from the file
         # and never reaches the ask table.
         missing = []
@@ -223,11 +314,17 @@ class Session:
             if it.stated:
                 self._fill_from_file(it, FIRST_LOOK)
             else:
+                it.state = "looking again"
                 missing.append(it)
+        self.items = items
+        self._partial = []
         # One targeted second look for each item the first look did not find.
         if missing:
-            found = self.model.second_look(self.intent, self.folder, [self._model_view(it) for it in missing])
+            self._step("second", n=0, of=len(missing), detail=f"One model call looks again for {len(missing)} items")
+            found = self.model.second_look(self.intent, self.folder, [self._model_view(it) for it in missing],
+                                           on_partial=lambda k: self._step("second", n=min(k, len(missing))))
             for it in missing:
+                it.state = "open"
                 hit = found.get(it.id)
                 if hit and self._verified(hit):
                     it.value = hit["value"]
@@ -235,10 +332,22 @@ class Session:
                         it.candidates.insert(0, it.value)
                     it.document, it.passage, it.passage_found, it.stated = hit["document"], hit["passage"], True, True
                     self._fill_from_file(it, SECOND_LOOK)
+            hits = sum(1 for it in missing if it.way == SECOND_LOOK)
+            self._done("second", f"{hits} of {len(missing)} found in the folder")
+        else:
+            self._done("second", "nothing was missing")
         # Only what is still missing is a gap. The model estimates for gaps only; the ask table decides.
         gaps = [it for it in items if not it.way]
-        estimates = self.model.estimate(self.intent, self.folder, [self._model_view(it) for it in gaps]) if gaps else {}
         for it in gaps:
+            if it.state != "conflict":
+                it.state = "estimating"
+        if gaps:
+            self._step("estimate", n=0, of=len(gaps), detail=f"One model call estimates {len(gaps)} gaps")
+        estimates = self.model.estimate(self.intent, self.folder, [self._model_view(it) for it in gaps],
+                                        on_partial=lambda k: self._step("estimate", n=min(k, len(gaps)))) if gaps else {}
+        for it in gaps:
+            if it.state == "estimating":
+                it.state = "open"
             est = estimates.get(it.id) or {}
             it.chance_wrong = min(1.0, max(0.0, float(est.get("chance_wrong", 0.5))))
             if it.state == "conflict":
@@ -248,10 +357,12 @@ class Session:
             it.would_notice = bool(est.get("would_notice", True))
             it.model_would_ask = est.get("model_would_ask")
             self._decide(it)
-        self.items = items
+        self._done("estimate", f"{len(gaps)} gaps estimated and decided" if gaps else "no gaps to estimate")
         for it in self.items:
             self._log(it, "decided", it.value)
         self._check_limit()
+        self.status = "ready"
+        self.progress["current"] = None
         return self
 
     def _with_intent(self, items: list[Item]) -> list[Item]:
@@ -628,10 +739,25 @@ class Session:
             "threshold_name": rule.get("threshold_name"),
         }
 
+    def progress_view(self) -> dict:
+        now = time.time()
+        steps = []
+        for st in self.progress.get("steps", []):
+            d = dict(st)
+            d["seconds"] = round(((st["ended"] or now) - st["started"]), 1) if st["started"] else None
+            steps.append(d)
+        return {"steps": steps, "files": [dict(f) for f in self.progress.get("files", [])],
+                "current": self.progress.get("current"), "now": now}
+
     def view(self) -> dict:
-        q = self.current_question()
+        ready = self.status == "ready"
+        q = self.current_question() if ready else None
+        shown = self.items or list(self._partial)
         return {
             "id": self.id,
+            "status": self.status,
+            "error": self.error,
+            "progress": self.progress_view(),
             "task": self.task,
             "intent": self.intent,
             "run": self.run,
@@ -644,17 +770,17 @@ class Session:
             "documents": [d.name for d in self.folder.documents] if self.folder else [],
             "skipped": [asdict(s) for s in self.folder.skipped] if self.folder else [],
             "headings": ALL_HEADINGS,
-            "items": [self.item_view(it) for it in self.items],
+            "items": [self.item_view(it) for it in shown],
             "question": None
             if q is None
             else {"item": q.id, "text": self.question_text(q), "kind": q.kind, "cost": q.cost, "reason": q.reason,
                   "candidates": q.candidates, "value": q.value, "sources": q.sources},
-            "questions_left": 0 if self.stopped else len(self.queue()),
+            "questions_left": 0 if (self.stopped or not ready) else len(self.queue()),
             "question_count": self.question_count,
             "running_cost": self.running_cost,
             "limit_reached": self.limit_reached,
             "limit": self.limit,
-            "at_limit": self.still_needed() if (self.at_limit() and not self.stopped) else None,
+            "at_limit": self.still_needed() if (ready and self.at_limit() and not self.stopped) else None,
             "stopped": self.stopped,
             "finished": self.finished,
             "brief": self.brief_text,
