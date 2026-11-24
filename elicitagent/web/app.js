@@ -161,7 +161,15 @@ function renderQuestion() {
   if (q.kind === "confirm") {
     replies.append(el("button", { class: "primary", onclick: () => reply("answer", q.value) }, "Yes, that is right"));
   }
-  if (q.kind === "choose") {
+  let clash = null;
+  if (q.kind === "choose" && q.sources && q.sources.length) {
+    clash = el("div", { class: "clash" }, el("p", { class: "clash-title" }, "The documents disagree. Which is right?"));
+    for (const src of q.sources) {
+      clash.append(el("button", { class: "clash-option", onclick: () => reply("answer", src.value) },
+        el("span", { class: "clash-value" }, src.value),
+        el("span", { class: "clash-source" }, `${src.document}: "${src.passage}"`)));
+    }
+  } else if (q.kind === "choose") {
     for (const c of q.candidates) replies.append(el("button", { onclick: () => reply("answer", c) }, c));
   }
   replies.append(answerBox, el("button", { onclick: () => reply("answer", answerBox.value) }, q.kind === "open" ? "Answer" : "Something else"));
@@ -172,6 +180,7 @@ function renderQuestion() {
     el("p", { class: "question-text" }, q.text),
     el("p", { class: "reason" }, q.reason),
     item && item.passage ? el("p", { class: "item-meta" }, `From ${item.document}: "${item.passage}"`) : null,
+    clash,
     replies,
     el("div", { class: "nobody" },
       el("button", { onclick: () => reply("nobody can answer", null, whoBox.value) }, "Nobody can answer this"),
@@ -198,8 +207,10 @@ function renderItems() {
       list.append(el("li", { class: it.id === currentId ? "current" : null, id: `item-${it.id}` },
         el("span", { class: `state ${stateClass(it.state)}` }, it.state),
         el("div", { class: "item-body" },
-          el("div", {}, el("span", { class: "item-label" }, it.label), it.value ? el("span", { class: "item-value" }, `: ${it.value}`) : null),
+          el("div", {}, el("span", { class: "item-label" }, it.label), it.value && it.state !== "conflict" ? el("span", { class: "item-value" }, `: ${it.value}`) : null),
           el("div", { class: "item-meta" }, `${it.stated_or_inferred} · ${it.must_hold_or_nice} · ${it.way}${it.document ? " · " + it.document : ""}${it.who_can_supply ? " · who can supply it: " + it.who_can_supply : ""}`),
+          it.sources && it.sources.length ? el("div", { class: "item-meta clash-note" },
+            "Documents disagree: " + it.sources.map((src) => `${src.value} (${src.document})`).join(" vs ")) : null,
         ),
         it.id === currentId ? el("span", { class: "now-tag" }, "this question") : null,
       ));

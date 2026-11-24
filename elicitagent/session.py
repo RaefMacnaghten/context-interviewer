@@ -52,7 +52,9 @@ class Item:
     asked: bool = False
     pending: bool = False  # waiting in the question queue
     who_can_supply: str | None = None
-    events: list[str] = field(default_factory=list)
+    # a clash (P11): the documents that disagree, each with its value and passage
+    sources: list[dict] = field(default_factory=list)
+    merged_from: list[str] = field(default_factory=list)
 
     @property
     def stated_or_inferred(self) -> str:
@@ -71,6 +73,46 @@ def value_supported(value: str | None, passage: str | None) -> bool:
 
 def _slug(text: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", text.lower()).strip("-") or "task"
+
+
+def _norm_value(value: str | None) -> str:
+    return " ".join(re.findall(r"[a-z0-9:]+", (value or "").lower()))
+
+
+def merge_clashes(items: list[Item]) -> list[Item]:
+    """P11. Items under the same heading, about the same thing (same key), from different documents,
+    with different values, become one item in the conflict state. Other items are left as they are."""
+    groups: dict[tuple[str, str], list[Item]] = {}
+    for it in items:
+        groups.setdefault((it.heading, it.key), []).append(it)
+    clashes: dict[tuple[str, str], Item] = {}
+    for gkey, group in groups.items():
+        with_value = [g for g in group if g.value and g.document]
+        if len({g.document for g in with_value}) < 2 or len({_norm_value(g.value) for g in with_value}) < 2:
+            continue
+        first = with_value[0]
+        candidates: list[str] = []
+        for g in with_value:
+            if g.value not in candidates:
+                candidates.append(g.value)
+        first.sources = [{"id": g.id, "document": g.document, "passage": g.passage, "value": g.value} for g in with_value]
+        first.merged_from = [g.id for g in group]
+        first.candidates = candidates
+        first.value = candidates[0]
+        first.state = "conflict"
+        first.stated = False
+        first.document = None
+        first.passage = None
+        first.must_hold = any(g.must_hold for g in group)
+        clashes[gkey] = first
+    out: list[Item] = []
+    for it in items:
+        gkey = (it.heading, it.key)
+        if gkey not in clashes:
+            out.append(it)
+        elif clashes[gkey] is it:
+            out.append(it)
+    return out
 
 
 def task_name_for(folder_path: str | Path) -> str:
@@ -131,11 +173,14 @@ class Session:
     def start(self) -> "Session":
         self.folder = read_folder(self.folder_path)
         raw_items = self.model.list_items(self.request, self.folder)
-        items = [self._normalise(raw, i) for i, raw in enumerate(raw_items)]
+        items = merge_clashes([self._normalise(raw, i) for i, raw in enumerate(raw_items)])
         estimates = self.model.estimate(self.request, self.folder, [self._model_view(it) for it in items])
         for it in items:
             est = estimates.get(it.id) or {}
             it.chance_wrong = min(1.0, max(0.0, float(est.get("chance_wrong", 0.5))))
+            if it.state == "conflict":
+                # the documents disagree: with n different values, picking one is wrong at least 1 - 1/n of the time
+                it.chance_wrong = max(it.chance_wrong, 1 - 1 / max(2, len(it.candidates)))
             it.can_undo = bool(est.get("can_undo", True))
             it.would_notice = bool(est.get("would_notice", True))
             it.model_would_ask = est.get("model_would_ask")
@@ -182,6 +227,7 @@ class Session:
             "document": it.document,
             "passage": it.passage,
             "about_named_person": it.named_person,
+            "conflict": [{"document": src["document"], "value": src["value"], "passage": src["passage"]} for src in it.sources] or None,
         }
 
     def _gap(self, it: Item) -> Gap:
@@ -201,16 +247,21 @@ class Session:
         d = self.table.decide(self._gap(it), self.rule, self.threshold)
         it.way, it.kind, it.cost = d.way, d.kind, d.cost
         it.harm_band, it.harm, it.reason, it.value_order = d.harm_band, d.harm, d.reason, d.value
+        conflict = it.state == "conflict"
+        if conflict and d.way != "guess and mark it":
+            it.reason = d.reason + " The documents disagree."
         if d.way == "ask":
             it.pending = True
-            if it.state != "conflict":
+            if not conflict:
                 it.state = "open"
         elif d.way == "read a file":
             it.state, it.source = "confirmed", "file"
         elif d.way == "guess and mark it":
             it.state, it.source = "assumed", "guess"
+            if conflict:
+                it.reason = d.reason + f" The documents disagree; it took {it.value}."
         elif d.way == "wait":
-            it.state = "open"
+            it.state = "conflict" if conflict else "open"
 
     # ------------------------------------------------------------ questions
 
@@ -249,7 +300,7 @@ class Session:
             it.value = str(value).strip()
             it.state, it.source = "confirmed", "person"
         elif action == "skip":
-            it.state = "open"
+            it.state = "conflict" if it.sources else "open"
         elif action == "nobody can answer":
             it.state = "cannot be done"
             it.way = "cannot be done"
@@ -265,7 +316,7 @@ class Session:
         # anything still waiting for a reply when the brief is written stays open
         for it in self.queue():
             it.pending = False
-            it.state = "open"
+            it.state = "conflict" if it.sources else "open"
         self.brief_text = write_brief(self)
         self.brief_path = self.run_dir / "brief.md"
         self.brief_path.write_text(self.brief_text, encoding="utf-8")
@@ -301,8 +352,8 @@ class Session:
                 "reason": it.reason,
                 "event": event,
                 "value": value,
-                "source_document": it.document,
-                "source_passage": it.passage,
+                "source_document": it.document if not it.sources else " | ".join(src["document"] for src in it.sources),
+                "source_passage": it.passage if not it.sources else " | ".join(src["passage"] or "" for src in it.sources),
                 "question_count": self.question_count,
                 "running_cost": round(self.running_cost, 4),
                 "limit_reached": self.limit_reached,
@@ -339,7 +390,8 @@ class Session:
             "items": [self.item_view(it) for it in self.items],
             "question": None
             if q is None
-            else {"item": q.id, "text": self.question_text(q), "kind": q.kind, "cost": q.cost, "reason": q.reason, "candidates": q.candidates, "value": q.value},
+            else {"item": q.id, "text": self.question_text(q), "kind": q.kind, "cost": q.cost, "reason": q.reason,
+                  "candidates": q.candidates, "value": q.value, "sources": q.sources},
             "questions_left": len(self.queue()),
             "question_count": self.question_count,
             "running_cost": self.running_cost,

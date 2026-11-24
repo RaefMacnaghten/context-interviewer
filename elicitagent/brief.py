@@ -15,8 +15,12 @@ def _source_note(it: "Item") -> str:
     if it.state == "confirmed" and it.source == "file":
         return f'confirmed, from {it.document}: "{" ".join((it.passage or "").split())}"'
     if it.state == "confirmed" and it.source == "person":
+        if it.sources:
+            return "confirmed by the person, where the documents disagreed (" + "; ".join(f'{src["value"]} in {src["document"]}' for src in it.sources) + ")"
         return "confirmed by the person"
     if it.state == "assumed":
+        if it.sources:
+            return "assumed: the documents disagree and the tool picked one, check before relying on it"
         return "assumed: guessed by the tool, check before relying on it"
     if it.state == "conflict":
         return "conflict: the documents disagree"
@@ -53,7 +57,9 @@ def write_brief(session: "Session") -> str:
     lines.append("")
     if ask_first:
         for it in ask_first:
-            extra = f" (values seen: {', '.join(it.candidates)})" if it.state == "conflict" and it.candidates else ""
+            extra = ""
+            if it.state == "conflict" and it.sources:
+                extra = " (the documents disagree: " + "; ".join(f'{src["value"]} in {src["document"]}' for src in it.sources) + ")"
             lines.append(f"- **{it.label}** ({it.heading}, {it.must_hold_or_nice}){extra}")
     else:
         lines.append("- Nothing.")
