@@ -33,7 +33,23 @@ async function api(path, body) {
   return data;
 }
 
+const STATE_GLYPH = { confirmed: "✓", assumed: "~", open: "?", conflict: "!", "not available here": "⊘",
+  listed: "·", "looking again": "·", estimating: "·", rejected: "×" };
+function stateChip(state, text) {
+  const label = text || (state.charAt(0).toUpperCase() + state.slice(1));
+  return el("span", { class: `chip st-${stateClass(state)}` }, el("span", { class: "glyph", "aria-hidden": "true" }, STATE_GLYPH[state] || "·"), label);
+}
+
+// The step bar under the top bar: Folder, Reading, Interview, Review, Brief.
+function renderSteps(on) {
+  const names = ["Folder", "Reading", "Interview", "Review", "Brief"];
+  const at = names.indexOf(on);
+  $("#steps").replaceChildren(...names.map((n, i) => el("span", { class: i < at ? "done" : i === at ? "on" : "", "aria-current": i === at ? "step" : null },
+    el("b", { "aria-hidden": "true" }, i < at ? "✓" : String(i + 1)), n)));
+}
+
 function stateClass(state) {
+  if (state === "listed" || state === "looking again" || state === "estimating") return "pending";
   return state === "not available here" ? "unavailable" : state;
 }
 
@@ -59,6 +75,7 @@ async function init() {
   $("#model-select").value = config.default_model;
   $("#limit-input").value = config.limit_start;
   $("#start-form").addEventListener("submit", start);
+  renderSteps("Folder");
   const m = location.hash.match(/^#s=([0-9a-f]+)$/);
   if (m) {
     try {
@@ -90,19 +107,19 @@ async function loadTree() {
   if (seq !== treeSeq) return; // a newer choice has been made
   const button = $("#start-form button[type=submit]");
   button.disabled = !t.ok;
-  const head = el("div", { class: "tree-head" },
+  const head = el("div", { class: "ph" },
     el("span", { class: "tree-title" }, "Files in this folder"),
-    t.folder ? el("span", { class: "tree-folder" }, t.folder) : null);
+    t.folder ? el("span", { class: "src" }, t.folder) : null);
   if (!t.tree) {
-    pane.replaceChildren(head, el("p", { class: "tree-msg" }, t.message));
+    pane.replaceChildren(head, el("div", { class: "pb" }, el("p", { class: "callout quiet tree-msg" }, t.message)));
     return;
   }
   const summary = `${t.files} ${t.files === 1 ? "file" : "files"}: ${t.to_read} will be read` +
     (t.skipped ? `, ${t.skipped} skipped` : "") + ". Nothing is read until you press \"Read the folder\".";
-  pane.replaceChildren(...[head,
-    t.ok ? null : el("p", { class: "tree-msg" }, t.message),
+  pane.replaceChildren(head, el("div", { class: "pb" }, ...[
+    t.ok ? null : el("p", { class: "callout quiet tree-msg" }, t.message),
     el("p", { class: "tree-summary" }, summary),
-    el("ul", { class: "tree", role: "tree" }, t.tree.children.map(treeNode))].filter(Boolean));
+    el("ul", { class: "tree", role: "tree" }, t.tree.children.map(treeNode))].filter(Boolean)));
 }
 
 function treeNode(n) {
@@ -197,39 +214,50 @@ function renderReading(pane) {
   const failed = view.status === "failed";
   const files = p.files || [];
   const listed = view.items.length;
-  pane.append(el("p", { class: "pane-title" }, failed ? "Reading stopped" : "Reading the folder"));
+  const read = files.filter((f) => f.read).length;
+  const skipped = files.length - read;
+  pane.className = `panel q-pane ${failed ? "bad" : ""}`;
+  pane.append(el("div", { class: "ph" },
+    failed ? el("span", { class: "glyph bad", "aria-hidden": "true" }, "!") : el("span", { class: "spin", "aria-hidden": "true" }),
+    failed ? "Reading stopped" : "Reading the folder"));
+  const body = el("div", { class: "pb" });
+  pane.append(body);
   if (failed) {
-    pane.append(
+    body.append(
       el("div", { class: "callout bad", role: "alert" }, view.error || "Something went wrong."),
-      el("p", { class: "muted small-note" }, "Nothing was guessed. No question was asked. Your folder was not changed."),
-      el("div", { class: "replies" },
-        el("button", { class: "primary", onclick: retry }, "Try again"),
-        el("button", { onclick: backToStart }, "Choose another folder")));
+      el("p", { class: "small" }, "Nothing was guessed. No question was asked. Your folder was not changed."),
+      el("div", { class: "brow" },
+        el("button", { class: "b pr", onclick: retry }, "Try again"),
+        el("button", { class: "b", onclick: backToStart }, "Choose another folder")));
+  } else if (files.length) {
+    body.append(el("p", { class: "read-head" }, `${files.length} ${files.length === 1 ? "file" : "files"}. ${read} read. ${skipped} I cannot read.`));
   }
   const list = el("ol", { class: "read-steps" });
   for (const st of p.steps) {
-    const count = st.of ? ` ${st.n ?? 0} of ${st.of}` : (st.n !== null && st.n !== undefined && st.key === "first" ? ` ${st.n} items` : "");
+    const count = st.of ? `${st.n ?? 0} of ${st.of}` : (st.key === "first" && st.n ? `${st.n} items` : "");
+    const right = st.state === "on" ? [count, elapsed(st)].filter(Boolean).join(" · ")
+      : st.state === "done" ? `${st.summary} · ${elapsed(st)}` : st.state === "failed" ? "stopped here" : "";
     list.append(el("li", { class: `read-step ${st.state}` },
-      el("span", { class: "read-mark", "aria-hidden": "true" }, st.state === "done" ? "✓" : st.state === "failed" ? "!" : st.state === "on" ? "…" : ""),
+      el("span", { class: "read-mark", "aria-hidden": "true" },
+        st.state === "done" ? "✓" : st.state === "failed" ? "!" : st.state === "on" ? el("span", { class: "spin" }) : ""),
       el("div", { class: "read-body" },
-        el("div", { class: "read-label" }, st.label,
-          st.state === "on" ? el("span", { class: "read-count" }, `${count}${count ? " · " : " "}${elapsed(st)}`) : null,
-          st.state === "done" ? el("span", { class: "read-count" }, `${st.summary} · ${elapsed(st)}`) : null),
+        el("div", { class: "read-label" }, el("span", {}, st.label), right ? el("span", { class: "read-count" }, right) : null),
         st.state === "on" || st.state === "failed" ? el("div", { class: "read-detail" }, st.detail) : null)));
   }
-  pane.append(list);
+  body.append(list);
   if (files.length) {
     const table = el("div", { class: "read-files", role: "table", "aria-label": "Files" },
-      el("div", { class: "read-file head", role: "row" }, el("span", {}, "File"), el("span", {}, "Status")));
+      el("div", { class: "frow hd2", role: "row" }, el("span", { role: "columnheader" }, "File"), el("span", { role: "columnheader" }, "Status")));
     for (const f of files) {
-      table.append(el("div", { class: `read-file ${f.read ? "read" : "skip"}`, role: "row" },
-        el("span", { class: "fn" }, f.name),
-        el("span", {}, f.read ? (f.items ? `Read. ${f.items} ${f.items === 1 ? "item" : "items"}` : "Read") : `Not read: ${f.reason}`)));
+      table.append(el("div", { class: `frow ${f.read ? "" : "ex"}`, role: "row" },
+        el("span", { class: "fn", role: "cell" }, f.name),
+        el("span", { role: "cell", class: f.read ? "ok-text" : "muted" },
+          f.read ? (f.items ? `✓ Read. ${f.items} ${f.items === 1 ? "item" : "items"}` : "✓ Read") : `Not read: ${f.reason}`)));
     }
-    pane.append(table);
+    body.append(table);
   }
   if (!failed) {
-    pane.append(el("p", { class: "muted small-note" },
+    body.append(el("p", { class: "callout quiet" },
       `So far: ${listed} ${listed === 1 ? "item" : "items"} on the right, each with its document and exact passage. ` +
       "No question is asked until reading is finished."));
   }
@@ -254,6 +282,10 @@ function backToStart() {
   location.hash = "";
   $("#interview").hidden = true;
   $("#start").hidden = false;
+  document.querySelectorAll("aside.left > .why").forEach((n) => n.remove());
+  $("#meter").hidden = true;
+  $("#task-name").hidden = true;
+  renderSteps("Folder");
 }
 
 // ---------------------------------------------------------------- interview
@@ -304,18 +336,18 @@ async function renderWhy(container, itemId) {
   try {
     data = await api(`/api/session/${view.id}/why/${itemId}`);
   } catch (e) {
-    container.replaceChildren(el("p", { class: "error" }, e.message));
+    container.replaceChildren(el("p", { class: "callout bad" }, e.message));
     return;
   }
   const d = data.decided;
+  const head = el("div", { class: "ph" }, el("span", {}, "Why this question"), el("span", { class: "sp" }), el("span", { class: "ro" }, "Read-only"));
   if (d.chance_wrong === null || d.chance_wrong === undefined) {
     // the clash between the person's intent and the folder's goal: never went to the ask table
-    container.replaceChildren(
-      el("p", { class: "why-title" }, "Why this question (read-only, from the gap trace)"),
-      el("dl", { class: "why-list" }, [el("dt", {}, "Kind of question"), el("dd", {}, `${d.question_kind}, cost ${d.question_cost}`),
+    container.replaceChildren(head, el("div", { class: "pb" },
+      el("dl", { class: "kv" }, [el("dt", {}, "Kind of question"), el("dd", {}, `${d.question_kind}, cost ${d.question_cost}`),
         el("dt", {}, "Rule"), el("dd", {}, "None: what you typed never goes to the ask table.")]),
       el("p", { class: "why-reason" }, d.reason),
-    );
+      el("p", { class: "small" }, "Taken from the gap trace. Nothing here can be changed.")));
     return;
   }
   const rows = [
@@ -333,14 +365,14 @@ async function renderWhy(container, itemId) {
   } else if (d.rule === "confidence-only") {
     working = `${num(d.chance_wrong)} against ${d.threshold}: ${d.chance_wrong >= d.threshold - 1e-9 ? "at or above, so ask" : "below, so do not ask"}.`;
   }
-  container.replaceChildren(
-    el("p", { class: "why-title" }, "Why this question (read-only, from the gap trace)"),
-    el("dl", { class: "why-list" }, rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)])),
+  container.replaceChildren(head, el("div", { class: "pb" }, ...[
+    el("dl", { class: "kv" }, rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)])),
     working ? el("p", { class: "why-working" }, working) : null,
     data.clash && d.way === "ask" ? el("p", { class: "why-working" }, "A clash is always asked, whatever this arithmetic says: the plan settles a clash by a choose question that shows both sides.") : null,
     el("p", { class: "why-reason" }, d.reason),
-    el("p", { class: "muted small-note" }, `Order of value: (chance wrong x harm) / cost = ${num(d.chance_wrong * d.harm / d.question_cost)}. Higher comes first.`),
-  );
+    el("p", { class: "small" }, `Order of value: (chance wrong x harm) / cost = ${num(d.chance_wrong * d.harm / d.question_cost)}. Higher comes first.`),
+    el("p", { class: "small" }, "Taken from the gap trace. Nothing here can be changed."),
+  ].filter(Boolean)));
 }
 
 async function control(itemId, action, value) {
@@ -357,13 +389,13 @@ async function control(itemId, action, value) {
 function itemControls(it) {
   if (view.finished) return null;
   if (it.rejected) {
-    return el("div", { class: "controls" }, el("button", { class: "mini", onclick: () => control(it.id, "restore") }, "Restore"));
+    return el("div", { class: "ctl" }, el("button", { class: "cb", onclick: () => control(it.id, "restore") }, "Restore"));
   }
   const canConfirm = it.value && it.state !== "conflict" && !(it.state === "confirmed" && it.source === "person");
-  return el("div", { class: "controls" },
-    canConfirm ? el("button", { class: "mini", title: "The value is right", onclick: () => control(it.id, "confirm") }, "Confirm") : null,
-    el("button", { class: "mini", title: "Change the value", onclick: () => { editing = it.id; renderItems(); } }, "Edit"),
-    el("button", { class: "mini", title: "This does not belong in the brief", onclick: () => control(it.id, "reject") }, "Reject"),
+  return el("div", { class: "ctl" },
+    canConfirm ? el("button", { class: "cb", title: "The value is right", "aria-label": `Confirm: ${it.label}`, onclick: () => control(it.id, "confirm") }, "Confirm") : null,
+    el("button", { class: "cb", title: "Change the value", "aria-label": `Edit: ${it.label}`, onclick: () => { editing = it.id; renderItems(); } }, "Edit"),
+    el("button", { class: "cb", title: "This does not belong in the brief", "aria-label": `Reject: ${it.label}`, onclick: () => control(it.id, "reject") }, "Reject"),
   );
 }
 
@@ -373,8 +405,8 @@ function editBox(it) {
   input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") save(); if (ev.key === "Escape") { editing = null; renderItems(); } });
   setTimeout(() => input.focus(), 0);
   return el("div", { class: "edit-box" }, input,
-    el("button", { class: "mini primary", onclick: save }, "Save"),
-    el("button", { class: "mini", onclick: () => { editing = null; renderItems(); } }, "Cancel"));
+    el("button", { class: "b sm pr", onclick: save }, "Save"),
+    el("button", { class: "b sm", onclick: () => { editing = null; renderItems(); } }, "Cancel"));
 }
 
 async function finish() {
@@ -388,15 +420,23 @@ function render() {
   badge.className = "badge " + (view.model_kind === "simulated" ? "sim" : "real");
   badge.textContent = view.model_kind === "simulated" ? "Simulated model" : `Model: ${view.model}`;
   $("#run-label").textContent = `Run ${view.run} · ${view.run_label}`;
+  const task = $("#task-name");
+  task.hidden = false;
+  task.replaceChildren("Brief for ", el("b", {}, view.task));
+  renderMeter();
   if (view.status === "reading" || view.status === "failed") {
+    renderSteps("Reading");
+    document.querySelectorAll("aside.left > .why").forEach((n) => n.remove());
     const pane = $("#question-pane");
     pane.replaceChildren();
     renderReading(pane);
     $("#progress-pane").replaceChildren();
     $("#progress-pane").hidden = true;
     renderItems();
+    renderBrief();
     return;
   }
+  renderSteps(view.finished ? "Brief" : (!view.question && !view.at_limit) ? "Review" : "Interview");
   $("#progress-pane").hidden = false;
   renderQuestion();
   renderProgress();
@@ -410,15 +450,17 @@ function render() {
 function renderLimit(pane) {
   const need = view.at_limit;
   const plural = need.questions === 1 ? "question" : "questions";
+  pane.className = "panel q-pane warn";
   pane.append(
-    el("h2", {}, "You have reached your question limit"),
-    el("p", {}, `Your limit is ${view.limit} in question cost, and you have used ${view.running_cost}. ` +
-      `I think I need at least ${need.questions} more ${plural}, with a question cost of ${need.cost}.`),
-    el("p", { class: "muted small-note" }, "This is a lower bound: an answer can reveal a new gap. The most important questions came first."),
-    el("div", { class: "replies" },
-      el("button", { class: "primary", onclick: () => limitChoice("continue") }, `Continue (${config.limit_start} more)`),
-      el("button", { onclick: () => limitChoice("stop") }, "Stop here")),
-    el("p", { class: "muted small-note" }, "If you stop: anything that cannot be undone, any fact about a named person and any clash is left open for the agent to ask; the rest is guessed and marked assumed."),
+    el("div", { class: "ph" }, el("span", { class: "glyph", "aria-hidden": "true" }, "◷"), "You have reached your question limit"),
+    el("div", { class: "pb" },
+      el("p", { class: "lead" }, `Your limit is ${view.limit} in question cost, and you have used ${view.running_cost}. ` +
+        `I think I need at least ${need.questions} more ${plural}, with a question cost of ${need.cost}.`),
+      el("p", { class: "callout warn" }, "This is a lower bound: an answer can reveal a new gap. The most important questions came first."),
+      el("div", { class: "brow" },
+        el("button", { class: "b pr", onclick: () => limitChoice("continue") }, `Continue (${config.limit_start} more)`),
+        el("button", { class: "b", onclick: () => limitChoice("stop") }, "Stop here")),
+      el("p", { class: "small" }, "If you stop: anything that cannot be undone, any fact about a named person and any clash is left open for the agent to ask; the rest is guessed and marked assumed.")),
   );
 }
 
@@ -438,25 +480,28 @@ function renderEndScreen(pane) {
   const waiting = live.filter((i) => i.state === "open" || i.state === "conflict");
   const assumed = live.filter((i) => i.state === "assumed");
   const unavailable = live.filter((i) => i.state === "not available here");
-  const section = (title, note, items, extra) => items.length ? el("div", { class: "review-section" },
-    el("h3", {}, `${title} (${items.length})`),
-    el("p", { class: "muted small-note" }, note),
-    el("ul", { class: "review-list" }, items.map((it) => el("li", {},
+  const section = (title, note, items, state, extra) => items.length ? el("div", { class: "review-section" },
+    el("div", { class: "sec-h" }, title, el("span", { class: "cnt" }, String(items.length))),
+    el("p", { class: "small" }, note),
+    el("ul", { class: "review-list" }, items.map((it) => el("li", { class: `rv st-${stateClass(state || it.state)}` },
       el("a", { href: `#item-${it.id}`, onclick: (ev) => { ev.preventDefault(); document.getElementById(`item-${it.id}`).scrollIntoView({ block: "center", behavior: "smooth" }); } }, it.label),
       it.value && it.state === "assumed" ? el("span", { class: "muted" }, `: ${it.value}`) : null,
       extra ? extra(it) : null)))) : null;
-  pane.append(...[
-    el("h2", {}, "Review before the brief is written"),
-    el("p", { class: "muted" }, `No more questions. Asked ${view.question_count}, question cost ${view.running_cost}. Check the brief on the right once: confirm, edit or reject anything. Then write it.`),
-    section("Waiting", "Not settled. The brief passes these to the agent as \"ask before you do this\".", waiting),
-    section("Guessed and marked", "The tool guessed these. Confirm or edit any you can.", assumed),
-    section("Not available here", "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, (it) => {
-      const box = el("input", { type: "text", value: it.who_could || "", placeholder: "Who could?", "aria-label": `Who could answer: ${it.label}` });
-      box.addEventListener("change", () => control(it.id, "who could", box.value));
-      return box;
-    }),
-    el("button", { class: "primary", onclick: finish }, "Write the brief"),
-  ].filter(Boolean));
+  pane.className = "panel q-pane";
+  pane.append(
+    el("div", { class: "ph" }, el("span", { class: "glyph", "aria-hidden": "true" }, "◉"), "Review before the brief is written"),
+    el("div", { class: "pb" }, ...[
+      el("p", {}, `No more questions. Asked ${view.question_count}, question cost ${view.running_cost}. Check the brief on the right once: confirm, edit or reject anything. Then write it.`),
+      section("Waiting", "Not settled. The brief passes these to the agent as \"ask before you do this\".", waiting),
+      section("Guessed and marked", "The tool guessed these. Confirm or edit any you can.", assumed, "assumed"),
+      section("Not available here", "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, "not available here", (it) => {
+        const box = el("input", { type: "text", value: it.who_could || "", placeholder: "Who could?", "aria-label": `Who could answer: ${it.label}` });
+        box.addEventListener("change", () => control(it.id, "who could", box.value));
+        return box;
+      }),
+      el("button", { class: "b pr big", onclick: finish }, "Write the brief"),
+    ].filter(Boolean)),
+  );
 }
 
 // A very small Markdown view for the brief: headings, lists, bold, italics, quotes. Text is escaped first.
@@ -482,25 +527,28 @@ function renderProgress() {
   const counts = {};
   for (const it of view.items) counts[it.state] = (counts[it.state] || 0) + 1;
   const order = ["confirmed", "assumed", "open", "conflict", "not available here"];
-  $("#progress-pane").replaceChildren(
+  $("#progress-pane").replaceChildren(el("div", { class: "pb" }, ...[
     el("div", {}, `Questions asked: ${view.question_count} · question cost ${view.running_cost}${view.limit !== null ? ` of ${view.limit}` : ""} · ${view.questions_left} waiting`),
-    el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => el("span", { class: `state ${stateClass(s)}` }, `${counts[s]} ${s}`))),
-    el("div", {}, `Read ${view.documents.length} documents: ${view.documents.join(", ")}`),
-    view.skipped.length ? el("div", {}, `Not read: ${view.skipped.map((s) => `${s.name} (${s.reason})`).join("; ")}`) : "",
-  );
+    el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => stateChip(s, `${counts[s]} ${s}`))),
+    el("div", {}, `Read ${view.documents.length} documents: `, ...view.documents.flatMap((d, i) => [i ? " " : "", el("span", { class: "src" }, d)])),
+    view.skipped.length ? el("div", {}, `Not read: ${view.skipped.map((s) => `${s.name} (${s.reason})`).join("; ")}`) : null,
+  ].filter(Boolean)));
 }
 
 function renderQuestion() {
   const pane = $("#question-pane");
+  document.querySelectorAll("aside.left > .why").forEach((n) => n.remove());
   pane.replaceChildren();
+  pane.className = "panel q-pane";
   if (view.finished) {
     pane.append(
-      el("h2", {}, "The brief is written"),
-      el("p", { class: "muted" }, `Saved in ${view.run_dir}.`),
-      el("div", { class: "downloads" },
-        el("a", { class: "button", href: `/api/session/${view.id}/brief.md` }, "Download the brief"),
-        el("a", { class: "button", href: `/api/session/${view.id}/gap-trace.jsonl` }, "Download the gap trace")),
-      el("p", {}, el("a", { href: "/" , onclick: () => { location.hash = ""; } }, "Start another")),
+      el("div", { class: "ph" }, el("span", { class: "glyph ok", "aria-hidden": "true" }, "✓"), "The brief is written"),
+      el("div", { class: "pb" },
+        el("p", { class: "small" }, `Saved in ${view.run_dir}.`),
+        el("div", { class: "brow" },
+          el("a", { class: "b pr", href: `/api/session/${view.id}/brief.md` }, "Download the brief"),
+          el("a", { class: "b", href: `/api/session/${view.id}/gap-trace.jsonl` }, "Download the gap trace")),
+        el("p", { class: "again" }, el("a", { href: "/", onclick: () => { location.hash = ""; } }, "Start another"))),
     );
     return;
   }
@@ -513,79 +561,113 @@ function renderQuestion() {
     renderEndScreen(pane);
     return;
   }
+  pane.className = "panel q-pane q-card";
   const item = view.items.find((i) => i.id === q.item);
-  const answerBox = el("input", { type: "text", placeholder: "Type your answer" });
-  const replies = el("div", { class: "replies" });
+  const answerBox = el("input", { type: "text", placeholder: "Type your answer", "aria-label": "Your answer" });
+  const replies = el("div", { class: "brow replies" });
+  const opts = el("div", { class: "opts" });
   if (q.kind === "confirm") {
-    replies.append(el("button", { class: "primary", onclick: () => reply("answer", q.value) }, "Yes, that is right"));
+    opts.append(el("button", { class: "opt pick", onclick: () => reply("answer", q.value) },
+      el("span", { class: "rd", "aria-hidden": "true" }), el("span", {}, "Yes, that is right")));
   }
   let clash = null;
   if (q.kind === "choose" && q.sources && q.sources.length) {
     const withYou = q.sources.some((src) => src.person);
     clash = el("div", { class: "clash" }, el("p", { class: "clash-title" },
       withYou ? "What you typed and the folder disagree. Which is right?" : "The documents disagree. Which is right?"));
+    const cards = el("div", { class: "cmp" });
     for (const src of q.sources) {
-      clash.append(el("button", { class: "clash-option", onclick: () => reply("answer", src.value) },
+      cards.append(el("button", { class: "clash-option", onclick: () => reply("answer", src.value) },
         el("span", { class: "clash-value" }, src.value),
-        el("span", { class: "clash-source" }, src.person ? "what you typed on the start page" : `from ${src.document}`)));
+        el("span", { class: `src ${src.person ? "you" : ""}` }, src.person ? "what you typed on the start page" : `from ${src.document}`)));
     }
+    clash.append(cards);
   } else if (q.kind === "choose") {
-    for (const c of q.candidates) replies.append(el("button", { onclick: () => reply("answer", c) }, c));
+    for (const c of q.candidates) opts.append(el("button", { class: "opt", onclick: () => reply("answer", c) }, el("span", { class: "rd", "aria-hidden": "true" }), el("span", {}, c)));
   }
-  replies.append(answerBox, el("button", { onclick: () => reply("answer", answerBox.value) }, q.kind === "open" ? "Answer" : "Something else"));
-  replies.append(el("button", { class: "quiet", title: "The item stays open. The question still counts.", onclick: () => reply("skip") }, "Skip"));
+  const typed = el("div", { class: "typed" }, answerBox,
+    el("button", { class: "b", onclick: () => reply("answer", answerBox.value) }, q.kind === "open" ? "Answer" : "Something else"));
+  replies.append(
+    el("button", { class: "b", title: "The item stays open. The question still counts.", onclick: () => reply("skip") }, "↷ Skip"));
   const whoBox = el("input", { type: "text", placeholder: "Who could? (optional)", "aria-label": "Who could answer this? (optional)" });
   pane.append(...[
-    el("p", { class: "cost" }, `Question ${view.question_count + 1} · ${q.kind} question · costs ${q.cost}`),
-    el("p", { class: "question-text" }, q.text),
-    el("p", { class: "reason" }, q.reason),
-    el("button", { class: "why-toggle", "aria-expanded": whyOpen ? "true" : "false", onclick: () => { whyOpen = !whyOpen; render(); } },
-      whyOpen ? "Hide why" : "Why this question?"),
-    whyOpen ? (() => { const box = el("div", { class: "why" }, el("p", { class: "muted" }, "Loading...")); renderWhy(box, q.item); return box; })() : null,
+    el("div", { class: "q-head" },
+      el("span", { class: "q-num" }, `Question ${view.question_count + 1}`),
+      el("span", { class: "kind" }, `${q.kind} question · costs ${q.cost}`),
+      el("span", { class: "sp" }),
+      el("button", { class: `b sm why-toggle ${whyOpen ? "on" : ""}`, "aria-expanded": whyOpen ? "true" : "false", onclick: () => { whyOpen = !whyOpen; render(); } },
+        whyOpen ? "Hide why" : "Why this question?")),
+    el("p", { class: "question-text qq" }, q.text),
+    el("p", { class: "reason q-why" }, q.reason),
     item ? sourceView(`q-${item.id}`, item.document, item.passage, item.context) : null,
     clash,
     clash && item ? el("div", { class: "clash-sources" }, item.sources.map((src, i) => sourceView(`q-${item.id}-${i}`, src.document, src.passage, src.context))) : null,
+    opts.childNodes.length ? opts : null,
+    typed,
     replies,
     el("div", { class: "cant-answer" },
-      el("button", { title: "Asking you again will not help. The tool stops asking and records who to go to.", onclick: () => reply("I can't answer this", null, whoBox.value) }, "I can't answer this"),
+      el("button", { class: "b", title: "Asking you again will not help. The tool stops asking and records who to go to.", onclick: () => reply("I can't answer this", null, whoBox.value) }, "⊘ I can't answer this"),
       whoBox),
   ].filter(Boolean));
+  if (whyOpen) {
+    const box = el("div", { class: "panel why" }, el("div", { class: "pb" }, el("p", { class: "small" }, "Loading...")));
+    pane.after(box);
+    renderWhy(box, q.item);
+  }
 }
 
 function renderItems() {
   const pane = $("#items-pane");
   const currentId = view.question && !view.finished ? view.question.item : null;
+  const counts = {};
+  for (const it of view.items) if (!it.rejected) counts[it.state] = (counts[it.state] || 0) + 1;
+  const order = ["confirmed", "assumed", "open", "conflict", "not available here"];
+  const reading = view.status !== "ready";
   pane.replaceChildren(...[
-    el("h2", {}, "Brief in progress"),
-    view.intent ? null : el("p", { class: "doc-request" }, "You did not say what you want the agent to do, so the goal comes from the folder."),
+    el("div", { class: "ph" }, el("span", {}, reading ? "The brief in progress, as items arrive" : "The brief in progress"),
+      el("span", { class: "sp" }), reading ? null : el("span", { class: "small" }, "On each item: confirm, edit, reject")),
   ].filter(Boolean));
+  const body = el("div", { class: "pb" });
+  pane.append(body);
+  if (!reading) body.append(el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => stateChip(s, `${counts[s]} ${s}`))));
+  if (!view.intent && !reading) body.append(el("p", { class: "callout quiet doc-request" }, "You did not say what you want the agent to do, so the goal comes from the folder."));
   for (const heading of view.headings) {
     const items = view.items.filter((i) => i.heading === heading);
-    pane.append(el("h3", {}, heading));
+    body.append(el("div", { class: "sec-h" }, heading, el("span", { class: "cnt" }, items.length ? String(items.length) : "")));
     if (!items.length) {
-      pane.append(el("div", { class: "empty" }, "Nothing here yet."));
+      body.append(el("div", { class: "empty-row" }, reading ? "Nothing yet." : "Nothing here yet."));
       continue;
     }
     const list = el("ul", { class: "items-list" });
     for (const it of items) {
-      const classes = [it.id === currentId ? "current" : "", it.rejected ? "rejected" : ""].join(" ").trim() || null;
+      const state = it.rejected ? "rejected" : it.state;
+      const classes = ["entry", `st-${stateClass(state)}`, it.id === currentId ? "current" : "", it.rejected ? "rejected" : ""].join(" ").trim();
+      const said = it.way === "said by the person";
+      const tags = [
+        el("span", { class: `tag ${said ? "you" : it.stated_or_inferred}` }, said ? "your intent" : it.stated_or_inferred),
+        el("span", { class: `tag ${it.must_hold_or_nice === "must hold" ? "must" : "nice"}` }, it.must_hold_or_nice),
+        it.way ? el("span", { class: "tag way" }, it.way) : null,
+        it.document ? el("span", { class: "src" }, it.document) : null,
+        it.who_could ? el("span", { class: "tag" }, `who could: ${it.who_could}`) : null,
+        it.source === "person" && !said ? el("span", { class: "src you" }, "settled by you") : null,
+        it.id === currentId ? el("span", { class: "now-tag" }, "this question") : null,
+      ].filter(Boolean);
       list.append(el("li", { class: classes, id: `item-${it.id}` },
-        el("span", { class: `state ${stateClass(it.state)}` }, it.rejected ? "rejected" : it.state),
-        el("div", { class: "item-body" },
-          el("div", {}, el("span", { class: "item-label" }, it.label), it.value && it.state !== "conflict" ? el("span", { class: "item-value" }, `: ${it.value}`) : null),
-          el("div", { class: "item-meta" }, `${it.way === "said by the person" ? "your intent" : it.stated_or_inferred} · ${it.must_hold_or_nice} · ${it.way}${it.document ? " · " + it.document : ""}${it.who_could ? " · who could: " + it.who_could : ""}${it.source === "person" && it.way !== "said by the person" ? " · settled by you" : ""}`),
-          it.sources && it.sources.length ? el("div", { class: "item-meta clash-note" },
+        stateChip(state, it.rejected ? "Rejected" : null),
+        el("div", { class: "tx" }, el("span", { class: "item-label" }, it.label), it.value && it.state !== "conflict" ? el("span", { class: "item-value" }, `: ${it.value}`) : null),
+        editing === it.id || reading ? null : itemControls(it),
+        el("div", { class: "mt" }, tags),
+        el("div", { class: "below" }, ...[
+          it.sources && it.sources.length ? el("div", { class: "clash-note" },
             (it.sources.some((src) => src.person) ? "Your intent and the folder disagree: " : "Documents disagree: ")
               + it.sources.map((src) => `${src.value} (${src.person ? "you" : src.document})`).join(" vs ")) : null,
           it.passage ? sourceView(`i-${it.id}`, it.document, it.passage, it.context, true) : null,
           ...(it.sources || []).map((src, n) => sourceView(`i-${it.id}-${n}`, src.document, src.passage, src.context, true)),
           editing === it.id ? editBox(it) : null,
-        ),
-        editing === it.id || view.status !== "ready" ? null : itemControls(it),
-        it.id === currentId ? el("span", { class: "now-tag" }, "this question") : null,
+        ].filter(Boolean)),
       ));
     }
-    pane.append(list);
+    body.append(list);
   }
 }
 
@@ -594,9 +676,24 @@ function renderBrief() {
   pane.hidden = !view.brief;
   $("#items-pane").hidden = Boolean(view.brief);
   if (!view.brief) return;
-  const body = el("div", { class: "brief-view" });
+  const body = el("div", { class: "brief-view doc" });
   body.innerHTML = briefHtml(view.brief); // escaped in briefHtml
   pane.replaceChildren(body);
+}
+
+function renderMeter() {
+  const m = $("#meter");
+  if (view.status !== "ready") { m.hidden = true; return; }
+  m.hidden = false;
+  const limit = view.limit;
+  const used = view.running_cost;
+  const frac = limit ? Math.min(1, used / limit) : 0;
+  m.replaceChildren(...[
+    el("span", {}, "question cost ", el("b", {}, String(used)), limit !== null ? ` of ${limit}` : ""),
+    limit !== null ? el("span", { class: "bar2", role: "img", "aria-label": `${used} of ${limit} used` },
+      el("i", { class: frac >= 1 ? "hot" : "", style: `width:${Math.round(frac * 100)}%` })) : null,
+    el("span", {}, el("b", {}, String(view.question_count)), ` ${view.question_count === 1 ? "question" : "questions"} asked`),
+  ].filter(Boolean));
 }
 
 init().catch((e) => {
