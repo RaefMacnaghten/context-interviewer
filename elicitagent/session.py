@@ -55,6 +55,8 @@ class Item:
     # a clash (P11): the documents that disagree, each with its value and passage
     sources: list[dict] = field(default_factory=list)
     merged_from: list[str] = field(default_factory=list)
+    # stage 4: the person rejected this item (it does not belong in the brief)
+    rejected: bool = False
 
     @property
     def stated_or_inferred(self) -> str:
@@ -266,7 +268,7 @@ class Session:
     # ------------------------------------------------------------ questions
 
     def queue(self) -> list[Item]:
-        return [it for it in self.items if it.pending]
+        return [it for it in self.items if it.pending and not it.rejected]
 
     def current_question(self) -> Item | None:
         q = self.queue()
@@ -308,6 +310,41 @@ class Session:
         else:
             raise ValueError(f"unknown reply: {action}")
         self._log(it, action, it.value if action == "answer" else (it.who_can_supply if action == "nobody can answer" else None))
+        return it
+
+    # ------------------------------------------------------------ stage 4: confirm, edit, reject
+
+    def control(self, item_id: str, action: str, value: str | None = None) -> Item:
+        """The person's own correction on any item. It is not a question, so it adds no question cost.
+
+        confirm: the current value is right. edit: replace the value. reject: the item does not belong in
+        the brief. restore: undo a reject. If the item was waiting for a question, the question is dropped.
+        """
+        it = self.get(item_id)
+        if action == "confirm":
+            if not it.value or it.state == "conflict":
+                raise ValueError("there is no single value to confirm; use edit")
+            it.state, it.source = "confirmed", "person"
+            logged = it.value
+        elif action == "edit":
+            if value is None or not str(value).strip():
+                raise ValueError("an edit needs a value")
+            it.value = str(value).strip()
+            it.state, it.source = "confirmed", "person"
+            logged = it.value
+        elif action == "reject":
+            it.rejected = True
+            logged = None
+        elif action == "restore":
+            if not it.rejected:
+                raise ValueError("the item is not rejected")
+            it.rejected = False
+            logged = it.value
+        else:
+            raise ValueError(f"unknown control: {action}")
+        if action != "restore" and it.pending:
+            it.pending = False  # settled by the person without the question being asked
+        self._log(it, action, logged)
         return it
 
     # ------------------------------------------------------------ finish

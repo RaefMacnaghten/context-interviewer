@@ -1,6 +1,6 @@
 # ElicitAgent (context-interviewer)
 
-Prose word count: 2314 words (code blocks, commands, inline code and file paths are not counted).
+Prose word count: 2393 words (code blocks, commands, inline code and file paths are not counted).
 
 IIS coursework project. ElicitAgent reads a folder of materials that a person wants an agent to work from, lists what the agent would need to know, and for each gap decides whether to read a file, ask, guess and mark it, or wait. It then writes a brief for the agent and a gap trace that records every decision. "ElicitAgent" is a working name.
 
@@ -14,7 +14,7 @@ Each part is labelled exactly as it is: **implemented** (built and run), **simul
 | Stage 1: the thin pass | implemented | Folder in, items under the eight headings and "Other", the ask table chooses, questions in three kinds, brief and gap trace out. Run on the real model (`claude-sonnet-5-5`) on the rota task on 24 Nov 2026, and on the simulated model. |
 | Stage 2: the main screen, side by side | implemented | Left: the question, its one line of reason, its cost and the replies (answer, skip, nobody can answer this). Right: the brief in progress under the eight headings and "Other", each item with its state, and the line the current question will fill highlighted. Checked in Chrome at desktop and phone widths. |
 | Stage 3: clash spotting (P11) | implemented | Items under the same heading, about the same thing (the same key), from different documents, with different values, become one item in the conflict state, asked as a "choose" question that shows both passages. On the rota task, the event plan's 22:30 and the hall email's 22:00 become one clash. |
-| Stage 4: confirm, edit, reject on every item | planned | |
+| Stage 4: confirm, edit, reject on every item | implemented | Every item on the right has the three controls; each use writes a gap-trace line. Confirm and edit settle the item as confirmed by the person; reject removes it from the brief (listed at the end as removed) and can be undone with restore. These are the person's own corrections, so they add no question cost. |
 | Stage 5: the end screen (P10) | planned | |
 | Stage 6: the question limit and order of value (P6 to P9) | planned | |
 | Stage 7: "why this question" panel and source passage | planned | |
@@ -89,7 +89,7 @@ uv run pytest
 3. **Estimate.** For each item the model only estimates the chance a guess would be wrong and answers two yes-or-no checks: could a mistake be undone, and would the person notice it.
 4. **Spot clashes.** Two items under the same heading, about the same thing, from different documents, with different values, become one item in the conflict state. With n different values, the chance a pick is wrong is taken as at least 1 - 1/n.
 5. **Decide.** The ask table, not the model, chooses the way. The two checks give a harm band (low 1, medium 3, high 9). The question kind sets its cost (confirm 0.5 when there is one candidate value, choose 1 for two to four, open 2 otherwise, and always open for a personal fact about a named person). The cost-weighted rule asks when chance wrong x harm is at least k x cost; the build uses k = 1. If it does not ask: a value the folder states is read from the file; a personal fact about a named person is left open, never guessed; a value whose wrong guess could not be undone waits; an item with nothing to guess from is left open; anything else is guessed and marked assumed.
-6. **Ask.** The main screen is side by side: the question on the left, the brief in progress on the right with the line the question will fill highlighted. One question at a time, with its one line of reason and its cost. Every question can be answered, skipped (the item stays open) or answered "nobody can answer this", with an optional note of who could supply it (the item becomes "cannot be done"). Skipping still costs the question.
+6. **Ask.** The main screen is side by side: the question on the left, the brief in progress on the right with the line the question will fill highlighted. One question at a time, with its one line of reason and its cost. Every question can be answered, skipped (the item stays open) or answered "nobody can answer this", with an optional note of who could supply it (the item becomes "cannot be done"). Skipping still costs the question. At any time the person can confirm, edit or reject any item on the right; each use is written to the gap trace.
 7. **Write.** The brief lists what the agent must ask first, what cannot be done and who needs to supply it, and every settled item under its heading with its state and source. The gap trace has one line per decision and per reply.
 
 ### The ask table

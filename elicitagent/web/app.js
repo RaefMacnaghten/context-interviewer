@@ -3,6 +3,7 @@
 const $ = (sel) => document.querySelector(sel);
 let config = null;
 let view = null;
+let editing = null; // id of the item being edited
 
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -108,6 +109,40 @@ async function reply(action, value, who) {
   render();
 }
 
+async function control(itemId, action, value) {
+  try {
+    view = await api(`/api/session/${view.id}/item`, { item: itemId, action, value });
+  } catch (e) {
+    alert(e.message);
+    return;
+  }
+  editing = null;
+  render();
+}
+
+function itemControls(it) {
+  if (view.finished) return null;
+  if (it.rejected) {
+    return el("div", { class: "controls" }, el("button", { class: "mini", onclick: () => control(it.id, "restore") }, "Restore"));
+  }
+  const canConfirm = it.value && it.state !== "conflict" && !(it.state === "confirmed" && it.source === "person");
+  return el("div", { class: "controls" },
+    canConfirm ? el("button", { class: "mini", title: "The value is right", onclick: () => control(it.id, "confirm") }, "Confirm") : null,
+    el("button", { class: "mini", title: "Change the value", onclick: () => { editing = it.id; renderItems(); } }, "Edit"),
+    el("button", { class: "mini", title: "This does not belong in the brief", onclick: () => control(it.id, "reject") }, "Reject"),
+  );
+}
+
+function editBox(it) {
+  const input = el("input", { type: "text", value: it.value || "", "aria-label": `New value for ${it.label}` });
+  const save = () => control(it.id, "edit", input.value);
+  input.addEventListener("keydown", (ev) => { if (ev.key === "Enter") save(); if (ev.key === "Escape") { editing = null; renderItems(); } });
+  setTimeout(() => input.focus(), 0);
+  return el("div", { class: "edit-box" }, input,
+    el("button", { class: "mini primary", onclick: save }, "Save"),
+    el("button", { class: "mini", onclick: () => { editing = null; renderItems(); } }, "Cancel"));
+}
+
 async function finish() {
   view = await api(`/api/session/${view.id}/finish`, {});
   render();
@@ -204,14 +239,17 @@ function renderItems() {
     }
     const list = el("ul", { class: "items-list" });
     for (const it of items) {
-      list.append(el("li", { class: it.id === currentId ? "current" : null, id: `item-${it.id}` },
-        el("span", { class: `state ${stateClass(it.state)}` }, it.state),
+      const classes = [it.id === currentId ? "current" : "", it.rejected ? "rejected" : ""].join(" ").trim() || null;
+      list.append(el("li", { class: classes, id: `item-${it.id}` },
+        el("span", { class: `state ${stateClass(it.state)}` }, it.rejected ? "rejected" : it.state),
         el("div", { class: "item-body" },
           el("div", {}, el("span", { class: "item-label" }, it.label), it.value && it.state !== "conflict" ? el("span", { class: "item-value" }, `: ${it.value}`) : null),
-          el("div", { class: "item-meta" }, `${it.stated_or_inferred} · ${it.must_hold_or_nice} · ${it.way}${it.document ? " · " + it.document : ""}${it.who_can_supply ? " · who can supply it: " + it.who_can_supply : ""}`),
+          el("div", { class: "item-meta" }, `${it.stated_or_inferred} · ${it.must_hold_or_nice} · ${it.way}${it.document ? " · " + it.document : ""}${it.who_can_supply ? " · who can supply it: " + it.who_can_supply : ""}${it.source === "person" ? " · settled by you" : ""}`),
           it.sources && it.sources.length ? el("div", { class: "item-meta clash-note" },
             "Documents disagree: " + it.sources.map((src) => `${src.value} (${src.document})`).join(" vs ")) : null,
+          editing === it.id ? editBox(it) : null,
         ),
+        editing === it.id ? null : itemControls(it),
         it.id === currentId ? el("span", { class: "now-tag" }, "this question") : null,
       ));
     }

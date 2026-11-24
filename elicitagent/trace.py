@@ -53,6 +53,7 @@ EVENTS = [
     "confirm",
     "edit",
     "reject",
+    "restore",
     "limit reached",
     "continue",
     "stop",

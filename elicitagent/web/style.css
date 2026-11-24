@@ -139,3 +139,13 @@ button:disabled { opacity: .7; cursor: progress; }
 .clash-value { display: block; font-weight: 600; font-size: 16px; }
 .clash-source { display: block; font-size: 12px; color: var(--muted); }
 .clash-note { color: var(--conflict); }
+
+/* Stage 4: confirm, edit, reject */
+.controls { display: flex; gap: 4px; flex-shrink: 0; opacity: .55; transition: opacity .15s; }
+.items-list li:hover .controls, .items-list li:focus-within .controls, .items-list li.current .controls { opacity: 1; }
+button.mini { font-size: 12px; padding: 2px 8px; border-radius: 6px; }
+.edit-box { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
+.edit-box input { flex: 1 1 200px; margin: 0; padding: 4px 8px; }
+.items-list li.rejected .item-label, .items-list li.rejected .item-value { text-decoration: line-through; color: var(--muted); }
+.items-list li.rejected .state { background: #9a9890; }
+@media (hover: none) { .controls { opacity: 1; } }

@@ -145,6 +145,8 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 if action == "reply":
                     s.reply(body["item"], body["action"], body.get("value"), body.get("who"))
+                elif action == "item":
+                    s.control(body["item"], body["action"], body.get("value"))
                 elif action == "finish":
                     s.finish()
                 else:

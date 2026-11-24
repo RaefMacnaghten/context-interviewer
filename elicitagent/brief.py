@@ -30,7 +30,8 @@ def _source_note(it: "Item") -> str:
 
 
 def write_brief(session: "Session") -> str:
-    items = session.items
+    items = [it for it in session.items if not it.rejected]
+    rejected = [it for it in session.items if it.rejected]
     lines: list[str] = []
     lines.append(f"# Brief for the agent: {session.task}")
     lines.append("")
@@ -83,5 +84,13 @@ def write_brief(session: "Session") -> str:
         lines.append("")
         for it in under:
             lines.append(f"- **{it.label}**: {it.value} _({it.must_hold_or_nice}; {_source_note(it)})_")
+        lines.append("")
+    if rejected:
+        lines.append("## Removed by the person")
+        lines.append("")
+        lines.append("The person rejected these items. Do not rely on them.")
+        lines.append("")
+        for it in rejected:
+            lines.append(f"- {it.label}")
         lines.append("")
     return "\n".join(lines).rstrip() + "\n"
