@@ -8,6 +8,8 @@ The first round of answers, covering questions 1 to 7, is taken from the author'
 
 Entries 1 to 4, 12, 14 to 31 and the closing section were added on 24 Nov 2026 from the conversation with the AI assistant and the design question board, each under the true date of its decision (11, 17, 18 to 19 and 24 Nov 2026), so nothing reads as backdated. Entries 5 to 11 and 13 are the first eight entries, renumbered into date order, with their cross-references updated and otherwise unchanged. Where the record holds only the AI's own summary at the time of what the author had challenged, the entry labels it as the AI's summary and never sets it as a blockquote or in his voice. Where the record has both his words and such a summary, both are given, each labelled.
 
+Entry 32 was added on 24 Nov 2026, after the author's own real-model run on the rota task, from his message about that run and the AI's reading of the run's gap trace, which is labelled as the AI's reading.
+
 Entries 14 to 20 cover the nine design lines the AI set out on 18 Nov 2026, with its own table of what each line first said, what it became and why. Seven of the nine lines changed because of the author's challenges on 18 and 19 Nov 2026, one entry per line; the record does not give a finer date for each. Lines 7 and 9 changed as consequences or for naming, not from a challenge, so they have no entry. The closing section lists items the AI raised and the author confirmed.
 
 ## 1. The idea: an interview tool that works from a folder of materials
@@ -575,6 +577,24 @@ This found a missing step. The intent box was added.
 **Why:** No reason was recorded beyond the account itself.
 
 **Original / AI-assisted:** Original: the account, which is his. AI-assisted: nothing is recorded for this entry.
+
+## 32. Must-hold items are asked, not left open
+
+**Date:** 24 Nov 2026
+
+**Question:** Why the tool stopped asking with items still open, and what it should do with an item that must hold and that the rule will not guess.
+
+**AI recommendation:** The AI's reading of his run's trace, not his words: the run stopped with 6 items open at question cost 3 of 8; a low-harm open question could never be asked, because chance wrong x harm was at most 1 against an open question's cost of 2; and leaving an item open or waiting was treated as free, although the brief hands it to the agent as "ask before you do this". The AI proposed a must-hold branch: an item that must hold and that the rule will not guess (it would wait, it has nothing to guess from, or it is a personal fact about a named person) is asked now, most valuable first, within the limit; an item that is only nice if possible may stay open; and every waiting or open item can be answered on the end screen.
+
+**Author's decision:** The author's message, after his own real-model run:
+
+> Why is it not asking me any more questions? There are 6 more open items?
+
+He agreed the must-hold branch as proposed. This is a change to the approved plan.
+
+**Why:** His question found that the tool left must-hold items for the agent to ask when he was there to answer them.
+
+**Original / AI-assisted:** Original: finding the problem in his own run. AI-assisted: the reading of the trace and the design of the branch.
 
 ## AI-raised, confirmed by the author
 

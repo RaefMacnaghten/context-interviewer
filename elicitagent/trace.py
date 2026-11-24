@@ -61,6 +61,7 @@ EVENTS = [
     "reject",
     "restore",
     "who could",
+    "answer on review",
     "limit reached",
     "continue",
     "stop",

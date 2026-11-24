@@ -291,3 +291,7 @@ label.ph { display: block; cursor: text; }
 .tag { display: inline-block; }
 .tag::first-letter { text-transform: uppercase; }
 .rv input { margin-top: 6px; }
+.rv-answer .brow { margin: 6px 0 0; }
+.rv-answer .typed { margin-top: 6px; }
+.rv-tag { margin-left: 6px; vertical-align: 1px; }
+.rv-answer .typed .b { height: 38px; padding-top: 0; padding-bottom: 0; }

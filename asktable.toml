@@ -48,6 +48,15 @@ choose_max_candidates = 4
 always_open = true
 never_guessed = true
 
+# Plan change 1 (24 Nov 2026). The must-hold branch: an item that must hold and that the
+# rule will not guess (it would wait, it has nothing to guess from, or it is a personal fact
+# about a named person) is asked now, most valuable first, within the limit. An item that is
+# only nice if possible may stay open. The branch applies to the rules listed here; never-ask
+# asks nothing, so it is not listed.
+[must_hold]
+ask_when_not_guessed = true
+rules = ["cost-weighted", "confidence-only", "model-decides", "always-ask"]
+
 # P9. The question limit, counted in question cost.
 [limit]
 start = 8

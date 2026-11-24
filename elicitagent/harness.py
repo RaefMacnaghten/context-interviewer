@@ -161,6 +161,19 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
         action, value, who = person_reply(it, row)
         session.reply(it.id, action, value, who)
         asked.append((it.id, it.kind, action, row.id if row else None))
+    # Plan change 1: on the end screen the person can answer what is still waiting or open. The script answers
+    # each such item it has a row for, unless the row says the answer is nowhere to be had.
+    on_review = []
+    for it in session.items:
+        if it.rejected or it.way == SAID or it.state not in ("open", "conflict"):
+            continue
+        row = match_row(it, rows)
+        if row is None or row.where.strip().lower() == "nowhere":
+            continue
+        action, value, _ = person_reply(it, row)
+        if action == "answer":
+            session.answer_on_review(it.id, value)
+            on_review.append((it.id, it.kind, it.cost, row.id))
     session.finish()
 
     outcomes = {}
@@ -200,11 +213,15 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
                                    "second look": sum(1 for it in session.items if it.way == "read a file (second look)")},
         "sheet_rows_not_found_by_the_tool": missed,
         "questions": [{"item": i, "kind": k, "reply": a, "row": r} for i, k, a, r in asked],
+        "answered_on_review": [{"item": i, "kind": k, "question_cost": c, "row": r} for i, k, c, r in on_review],
+        "answered_on_review_question_cost": sum(c for _, _, c, _ in on_review),
         "items": outcomes,
     }
     (session.run_dir / "dry-run-summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")
     print(f"Dry run on {session.task}, {session.run_label}, against {sheet_path.name} (a draft, so this is not a result).")
-    print(f"Questions asked: {session.question_count}, question cost {session.running_cost:g}.")
+    print(f"Questions asked: {session.question_count}, question cost {session.running_cost:g}. "
+          f"Answered on the review screen: {len(on_review)} (their question cost if asked: "
+          f"{sum(c for _, _, c, _ in on_review):g}).")
     print("Outcomes: " + ", ".join(f"{k} {v}" for k, v in sorted(counts.items())))
     print(f"Silent wrong guesses: {silent_wrong}. Wasted questions (the folder held the answer): {len(wasted)}, "
           f"question cost {sum(it.cost for it in wasted):g}. Sheet rows the tool did not find: {', '.join(missed) or 'none'}.")

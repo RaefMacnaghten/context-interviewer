@@ -67,6 +67,7 @@ class Item:
     state: str = "open"
     source: str = ""  # "file", "person", "guess" or ""
     asked: bool = False
+    answered_on_review: bool = False  # answered by the person on the end screen, not asked as a question
     pending: bool = False  # waiting in the question queue
     who_could: str | None = None
     # a clash (P11): the documents that disagree, each with its value and passage
@@ -482,6 +483,7 @@ class Session:
             conflict=it.state == "conflict",
             model_would_ask=it.model_would_ask,
             has_value=bool(it.value),
+            must_hold=it.must_hold,
         )
 
     def _decide(self, it: Item) -> None:
@@ -621,6 +623,23 @@ class Session:
             raise ValueError(f"unknown reply: {action}")
         self._log(it, action, it.value if action == "answer" else (it.who_could if action == CANT_ANSWER else None))
         self._check_limit()
+        return it
+
+    def answer_on_review(self, item_id: str, value: str | None) -> Item:
+        """Plan change 1: on the end screen the person can answer any item that is waiting or open. No question
+        was asked, so it adds nothing to the question count or cost; the trace line says it was answered here."""
+        it = self.get(item_id)
+        if self.finished:
+            raise ValueError("the brief is already written")
+        if self.current_question() is not None or self.at_limit():
+            raise ValueError("items can be answered here only on the end screen")
+        if it.rejected or it.state not in ("open", "conflict"):
+            raise ValueError(f"{item_id} is not waiting or open")
+        if value is None or not str(value).strip():
+            raise ValueError("an answer needs a value")
+        it.value = str(value).strip()
+        it.state, it.source, it.answered_on_review = "confirmed", "person", True
+        self._log(it, "answer on review", it.value)
         return it
 
     # ------------------------------------------------------------ stage 4: confirm, edit, reject

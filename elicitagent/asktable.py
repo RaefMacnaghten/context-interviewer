@@ -34,6 +34,7 @@ class Gap:
     conflict: bool = False
     model_would_ask: bool | None = None
     has_value: bool = True  # False when there is nothing to guess from
+    must_hold: bool = False
 
 
 @dataclass(frozen=True)
@@ -59,6 +60,7 @@ class AskTable:
         self.kinds = data["kinds"]
         self.rules = data["rules"]
         self.named_person = data["named_person"]
+        self.must_hold = data.get("must_hold", {})
         self.limit_start = data["limit"]["start"]
 
     @classmethod
@@ -87,6 +89,9 @@ class AskTable:
         if self.kinds["choose_min_candidates"] <= candidates <= self.kinds["choose_max_candidates"]:
             return "choose"
         return "open"
+
+    def must_hold_applies(self, rule: str) -> bool:
+        return bool(self.must_hold.get("ask_when_not_guessed", False)) and rule in self.must_hold.get("rules", [])
 
     def rule_names(self) -> list[str]:
         return list(self.rules.keys())
@@ -137,17 +142,21 @@ class AskTable:
             if gap.named_person:
                 reason += " It is about a named person, so it is an open question."
         elif gap.named_person and self.named_person.get("never_guessed", True):
-            way = "wait"
+            way, why = "wait", "personal facts about a named person are never guessed"
             reason = "Left open: personal facts about a named person are never guessed."
         elif not gap.can_undo and self.rules[rule].get("irreversible_waits", False):
-            way = "wait"
+            way, why = "wait", "a wrong guess here could not be undone"
             reason = "Held back: a wrong guess here could not be undone, so it waits for you."
         elif not gap.has_value:
-            way = "wait"
+            way, why = "wait", "there is nothing to guess from"
             reason = "Left open: there is nothing to guess from."
         else:
             way = "guess and mark it"
             reason = f"Guessed and marked: about {pct} likely to be wrong with {band} harm, not worth a {kind} question."
+        if way == "wait" and gap.must_hold and self.must_hold_applies(rule):
+            # plan change 1: what must hold and will not be guessed is asked now, not left for the agent
+            way, asks = "ask", True
+            reason = f"Asked: must hold and cannot be guessed ({why})."
         return Decision(
             way=way,
             asks=asks,

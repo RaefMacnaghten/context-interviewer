@@ -415,6 +415,27 @@ function editBox(it) {
     el("button", { class: "b sm", onclick: () => { editing = null; renderItems(); } }, "Cancel"));
 }
 
+// Plan change 1: a waiting or open item can be answered on the end screen. The values the documents give are
+// offered as buttons; anything else can be typed.
+function reviewAnswer(it) {
+  const box = el("input", { type: "text", placeholder: "Your answer", "aria-label": `Your answer: ${it.label}` });
+  const send = (v) => reviewReply(it.id, v);
+  box.addEventListener("keydown", (ev) => { if (ev.key === "Enter") send(box.value); });
+  const picks = (it.candidates || []).slice(0, 4).map((c) => el("button", { class: "b sm", onclick: () => send(c) }, c));
+  return el("div", { class: "rv-answer" }, picks.length ? el("div", { class: "brow" }, picks) : null,
+    el("div", { class: "typed" }, box, el("button", { class: "b sm", onclick: () => send(box.value) }, "Answer")));
+}
+
+async function reviewReply(itemId, value) {
+  try {
+    view = await api(`/api/session/${view.id}/review`, { item: itemId, value });
+  } catch (e) {
+    alert(e.message);
+    return;
+  }
+  render();
+}
+
 async function finish() {
   view = await api(`/api/session/${view.id}/finish`, {});
   render();
@@ -492,13 +513,14 @@ function renderEndScreen(pane) {
     el("ul", { class: "review-list" }, items.map((it) => el("li", { class: `rv st-${stateClass(state || it.state)}` },
       el("a", { href: `#item-${it.id}`, onclick: (ev) => { ev.preventDefault(); document.getElementById(`item-${it.id}`).scrollIntoView({ block: "center", behavior: "smooth" }); } }, it.label),
       it.value && it.state === "assumed" ? el("span", { class: "muted" }, `: ${it.value}`) : null,
+      it.state === "open" || it.state === "conflict" ? el("span", { class: `tag ${it.must_hold_or_nice === "must hold" ? "must" : "nice"} rv-tag` }, it.must_hold_or_nice) : null,
       extra ? extra(it) : null)))) : null;
   pane.className = "panel q-pane";
   pane.append(
     el("div", { class: "ph" }, el("span", { class: "glyph", "aria-hidden": "true" }, "◉"), "Review before the brief is written"),
     el("div", { class: "pb" }, ...[
       el("p", {}, `No more questions. Asked ${view.question_count}, question cost ${view.running_cost}. Check the brief on the right once: confirm, edit or reject anything. Then write it.`),
-      section("Waiting", "Not settled. The brief passes these to the agent as \"ask before you do this\".", waiting),
+      section("Waiting", "Not settled. Answer any you can here; the brief passes the rest to the agent as \"ask before you do this\".", waiting, null, reviewAnswer),
       section("Guessed and marked", "The tool guessed these. Confirm or edit any you can.", assumed, "assumed"),
       section("Not available here", "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, "not available here", (it) => {
         const box = el("input", { type: "text", value: it.who_could || "", placeholder: "Who could?", "aria-label": `Who could answer: ${it.label}` });
