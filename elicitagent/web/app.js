@@ -230,11 +230,12 @@ function renderReading(pane) {
         el("button", { class: "b pr", onclick: retry }, "Try again"),
         el("button", { class: "b", onclick: backToStart }, "Choose another folder")));
   } else if (files.length) {
-    body.append(el("p", { class: "read-head" }, `${files.length} ${files.length === 1 ? "file" : "files"}. ${read} read. ${skipped} I cannot read.`));
+    body.append(el("p", { class: "read-head" }, `${files.length} ${files.length === 1 ? "file" : "files"}. ` +
+      (skipped ? `${read} read. ${skipped} I cannot read.` : (files.length === 1 ? "It is read." : "All are read."))));
   }
   const list = el("ol", { class: "read-steps" });
   for (const st of p.steps) {
-    const count = st.of ? `${st.n ?? 0} of ${st.of}` : (st.key === "first" && st.n ? `${st.n} items` : "");
+    const count = st.of ? `${st.n ?? 0} of ${st.of}` : (st.key === "first" && st.n ? `${st.n} ${st.n === 1 ? "item" : "items"}` : "");
     const right = st.state === "on" ? [count, elapsed(st)].filter(Boolean).join(" · ")
       : st.state === "done" ? `${st.summary} · ${elapsed(st)}` : st.state === "failed" ? "stopped here" : "";
     list.append(el("li", { class: `read-step ${st.state}` },

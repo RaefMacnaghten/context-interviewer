@@ -261,7 +261,7 @@ class Session:
             f["items"] = counts.get(f["name"], 0)
         latest = listed[-1].document if listed and listed[-1].document else None
         self._step("first", n=len(listed), of=None,
-                   detail=f"{len(listed)} items back so far" + (f"; the latest came from {latest}" if latest else ""))
+                   detail=f"{len(listed)} {'item' if len(listed) == 1 else 'items'} back so far" + (f"; the latest came from {latest}" if latest else ""))
 
     def start_safely(self) -> "Session":
         """start(), for the web page: a failure is kept as the session's error, in plain words, never raised."""
@@ -292,10 +292,10 @@ class Session:
         self._done("read", f"{len(self.folder.documents)} read, {len(self.folder.skipped)} skipped")
         # First look: the model lists items with their sources; clashes between documents are merged (P11).
         n_docs = len(self.folder.documents)
-        self._step("first", detail=f"The model is reading all {n_docs} documents in one call")
+        self._step("first", detail=(f"The model is reading all {n_docs} documents in one call" if n_docs != 1 else "The model is reading the document in one call"))
         raw_items = self.model.list_items(self.intent, self.folder, on_partial=self._on_listed)
         self._on_listed(raw_items)
-        self._done("first", f"{len(raw_items)} items listed")
+        self._done("first", f"{len(raw_items)} {'item' if len(raw_items) == 1 else 'items'} listed")
         self._step("clash", detail="Comparing items about the same thing from different documents")
         items = merge_clashes([self._normalise(raw, i) for i, raw in enumerate(raw_items)])
         # The person's intent is the first goal item. With no intent, the goal is worked out from the folder.
@@ -320,7 +320,7 @@ class Session:
         self._partial = []
         # One targeted second look for each item the first look did not find.
         if missing:
-            self._step("second", n=0, of=len(missing), detail=f"One model call looks again for {len(missing)} items")
+            self._step("second", n=0, of=len(missing), detail=f"One model call looks again for {len(missing)} {'item' if len(missing) == 1 else 'items'}")
             found = self.model.second_look(self.intent, self.folder, [self._model_view(it) for it in missing],
                                            on_partial=lambda k: self._step("second", n=min(k, len(missing))))
             for it in missing:
@@ -342,7 +342,7 @@ class Session:
             if it.state != "conflict":
                 it.state = "estimating"
         if gaps:
-            self._step("estimate", n=0, of=len(gaps), detail=f"One model call estimates {len(gaps)} gaps")
+            self._step("estimate", n=0, of=len(gaps), detail=f"One model call estimates {len(gaps)} {'gap' if len(gaps) == 1 else 'gaps'}")
         estimates = self.model.estimate(self.intent, self.folder, [self._model_view(it) for it in gaps],
                                         on_partial=lambda k: self._step("estimate", n=min(k, len(gaps)))) if gaps else {}
         for it in gaps:
@@ -357,7 +357,7 @@ class Session:
             it.would_notice = bool(est.get("would_notice", True))
             it.model_would_ask = est.get("model_would_ask")
             self._decide(it)
-        self._done("estimate", f"{len(gaps)} gaps estimated and decided" if gaps else "no gaps to estimate")
+        self._done("estimate", f"{len(gaps)} {'gap' if len(gaps) == 1 else 'gaps'} estimated and decided" if gaps else "no gaps to estimate")
         for it in self.items:
             self._log(it, "decided", it.value)
         self._check_limit()
