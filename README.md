@@ -1,6 +1,6 @@
 # ElicitAgent (context-interviewer)
 
-Prose word count: 1953 words (code blocks, commands, inline code and file paths are not counted).
+Prose word count: 2142 words (code blocks, commands, inline code and file paths are not counted).
 
 IIS coursework project. ElicitAgent reads a folder of materials that a person wants an agent to work from, lists what the agent would need to know, and for each gap decides whether to read a file, ask, guess and mark it, or wait. It then writes a brief for the agent and a gap trace that records every decision. "ElicitAgent" is a working name.
 
@@ -22,7 +22,7 @@ Each part is labelled exactly as it is: **implemented** (built and run), **simul
 | Model access: scripted stand-in | simulated | Fixed estimates from `tasks/<task>/simulated-model.json`. Every run with it is labelled simulated in the page, the brief and every gap-trace line. Written for the rota task only; the inbox task has none yet. |
 | Ask table (`asktable.toml`) | implemented | Both rules, the five fixed settings, harm bands, question costs, the named-person rule. |
 | Automated tests | implemented | `uv run pytest`: the ask table and the gap trace fields. |
-| Test harness (a script plays the person) | planned | |
+| Test harness (a script plays the person) | implemented | `uv run elicitagent dry-run tasks/rota`. One dry run on the rota task ran on 24 Nov 2026 on the real model (`claude-sonnet-5-5`), and dry runs ran on the simulated model, all against the **draft** rota answer sheet, so none of their numbers is a result. |
 | The full test (138 runs) | planned | For the Assignment 3 talk, not this build. |
 
 ### What has actually been run
@@ -31,6 +31,8 @@ Each part is labelled exactly as it is: **implemented** (built and run), **simul
 |---|---|---|---|
 | 24 Nov 2026 | rota | simulated | Thin pass end to end in the web page: 26 items, 8 questions, brief written. |
 | 24 Nov 2026 | rota | real, `claude-sonnet-5-5` | Thin pass end to end in the web page: 50 items listed by the model, 3 questions asked under the cost-weighted rule at k = 1, brief and gap trace written. The run exposed two problems that the stand-in hid; both are fixed (see the development record). |
+| 24 Nov 2026 | rota | real, `claude-sonnet-5-5` | One harness dry run, the script playing the person from the draft answer sheet: 45 items, 2 questions asked (question cost 2.5), brief, gap trace with outcome lines, and a summary written. It showed that yes-or-no rows cannot be marked by script when the model words a value as a sentence; those now go to hand marking. |
+| 24 Nov 2026 | rota | simulated | Harness dry runs against the draft answer sheet, used to test the harness itself. |
 
 ## Stack
 
@@ -67,6 +69,12 @@ uv run --env-file /path/outside/the/repo/elicitagent.env elicitagent serve --mod
 `.env.example` shows the variable name. With "Automatic", the tool uses the API when the variable is set and the simulated model otherwise, and the page always says which one is in use.
 
 Each run writes `brief.md` and `gap-trace.jsonl` under `runs/<task>/` (not committed).
+
+**One dry run with a script playing the person.** The script answers from the task's answer sheet, then marks each item correct, wrong or left open where the sheet has an exact or yes-or-no answer, and leaves the rest for marking by hand. It adds an outcome line per item to the gap trace and writes `dry-run-summary.json`. The answer sheets are drafts, so this checks the harness, not the tool.
+
+```sh
+uv run elicitagent dry-run tasks/rota --model simulated
+```
 
 **Tests.**
 
