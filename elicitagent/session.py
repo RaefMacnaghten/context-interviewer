@@ -593,9 +593,15 @@ class Session:
         else:
             raise ValueError(f"unknown choice at the limit: {action}")
 
+    @staticmethod
+    def confirm_value(it: Item) -> str | None:
+        """The value a confirm question asks about: the item's value, or its one candidate when the model gave a
+        candidate but no value."""
+        return it.value or (it.candidates[0] if len(it.candidates) == 1 else None)
+
     def question_text(self, it: Item) -> str:
         if it.kind == "confirm":
-            return f"Is this right? {it.label}: {it.value}"
+            return f"Is this right? {it.label}: {self.confirm_value(it)}"
         if it.kind == "choose":
             return f"Which is right? {it.label}"
         return f"{it.label}?"
@@ -814,7 +820,8 @@ class Session:
             "question": None
             if q is None
             else {"item": q.id, "text": self.question_text(q), "kind": q.kind, "cost": q.cost, "reason": q.reason,
-                  "candidates": q.candidates, "value": q.value, "sources": q.sources},
+                  "candidates": q.candidates, "value": self.confirm_value(q) if q.kind == "confirm" else q.value,
+                  "sources": q.sources},
             "questions_left": 0 if (self.stopped or not ready) else len(self.queue()),
             "question_count": self.question_count,
             "running_cost": self.running_cost,

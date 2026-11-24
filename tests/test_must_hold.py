@@ -155,3 +155,25 @@ def test_answering_on_the_end_screen_writes_a_trace_line(tmp_path):
     assert s.get("t1").state == "confirmed"
     with pytest.raises(ValueError):  # only what is waiting or open
         s.answer_on_review("r1", "blue")
+
+
+def test_a_confirm_question_with_a_candidate_but_no_value_asks_about_the_candidate(tmp_path):
+    # seen in a real run: the model gave one candidate ("Email") and no value, and the question read "...: None"
+    folder = shed_task(tmp_path)
+    script = json.loads((folder.parent / "simulated-model.json").read_text())
+    script["items"].append({"id": "c1", "heading": "What the agent may do", "key": "channel",
+                            "label": "How the agent sends the plan", "value": None, "candidates": ["Email"],
+                            "stated": False, "must_hold": False, "document": None, "passage": None,
+                            "about_named_person": False,
+                            "estimate": {"chance_wrong": 0.9, "can_undo": True, "would_notice": False}})
+    (folder.parent / "simulated-model.json").write_text(json.dumps(script))
+    s = Session(folder, "", SimulatedModel.for_folder(folder), runs_dir=tmp_path / "runs", limit=None).start()
+    it = s.get("c1")
+    assert it.kind == "confirm" and it.pending
+    assert s.question_text(it) == "Is this right? How the agent sends the plan: Email"
+    while (q := s.current_question()) is not None and q.id != "c1":
+        s.reply(q.id, "skip")
+    view = s.view()["question"]
+    assert view["item"] == "c1" and view["value"] == "Email"
+    s.reply("c1", "answer", view["value"])
+    assert s.get("c1").value == "Email" and s.get("c1").state == "confirmed"
