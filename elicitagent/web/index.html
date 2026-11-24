@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ElicitAgent</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <h1>ElicitAgent</h1>
+    <span id="model-badge" class="badge" hidden></span>
+    <span id="run-label" class="muted"></span>
+  </header>
+
+  <main id="app">
+    <section id="start" class="card">
+      <h2>Hand a task to an agent</h2>
+      <p class="muted">ElicitAgent reads the folder first, then asks only what the folder does not settle.</p>
+      <form id="start-form">
+        <label>Folder of materials
+          <select id="task-select"></select>
+        </label>
+        <label>Or a folder path
+          <input id="folder-input" type="text" placeholder="tasks/rota/materials">
+        </label>
+        <label>What do you want the agent to do?
+          <textarea id="request-input" rows="2"></textarea>
+        </label>
+        <div class="row">
+          <label>Rule
+            <select id="rule-select"></select>
+          </label>
+          <label>Model
+            <select id="model-select">
+              <option value="auto">Automatic</option>
+              <option value="simulated">Simulated (no key needed)</option>
+              <option value="anthropic">Anthropic API</option>
+            </select>
+          </label>
+        </div>
+        <p id="start-error" class="error" hidden></p>
+        <button type="submit" class="primary">Read the folder</button>
+      </form>
+    </section>
+
+    <section id="interview" hidden>
+      <div id="question-pane" class="card"></div>
+      <div id="items-pane" class="card"></div>
+      <div id="brief-pane" class="card" hidden></div>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>
