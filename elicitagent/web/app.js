@@ -120,8 +120,23 @@ function render() {
   badge.textContent = view.model_kind === "simulated" ? "Simulated model" : `Model: ${view.model}`;
   $("#run-label").textContent = `Run ${view.run} · ${view.run_label}`;
   renderQuestion();
+  renderProgress();
   renderItems();
   renderBrief();
+  const current = document.querySelector(".items-list li.current");
+  if (current) current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+}
+
+function renderProgress() {
+  const counts = {};
+  for (const it of view.items) counts[it.state] = (counts[it.state] || 0) + 1;
+  const order = ["confirmed", "assumed", "open", "conflict", "cannot be done"];
+  $("#progress-pane").replaceChildren(
+    el("div", {}, `Questions asked: ${view.question_count} · question cost ${view.running_cost} · ${view.questions_left} waiting`),
+    el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => el("span", { class: `state ${stateClass(s)}` }, `${counts[s]} ${s}`))),
+    el("div", {}, `Read ${view.documents.length} documents: ${view.documents.join(", ")}`),
+    view.skipped.length ? el("div", {}, `Not read: ${view.skipped.map((s) => `${s.name} (${s.reason})`).join("; ")}`) : "",
+  );
 }
 
 function renderQuestion() {
@@ -150,10 +165,10 @@ function renderQuestion() {
     for (const c of q.candidates) replies.append(el("button", { onclick: () => reply("answer", c) }, c));
   }
   replies.append(answerBox, el("button", { onclick: () => reply("answer", answerBox.value) }, q.kind === "open" ? "Answer" : "Something else"));
-  replies.append(el("button", { class: "quiet", onclick: () => reply("skip") }, "Skip"));
+  replies.append(el("button", { class: "quiet", title: "The item stays open. The question still counts.", onclick: () => reply("skip") }, "Skip"));
   const whoBox = el("input", { type: "text", placeholder: "Who could supply it? (optional)" });
   pane.append(...[
-    el("p", { class: "cost" }, `Question ${view.question_count + 1} · ${q.kind} · costs ${q.cost} · ${view.questions_left} waiting`),
+    el("p", { class: "cost" }, `Question ${view.question_count + 1} · ${q.kind} question · costs ${q.cost}`),
     el("p", { class: "question-text" }, q.text),
     el("p", { class: "reason" }, q.reason),
     item && item.passage ? el("p", { class: "item-meta" }, `From ${item.document}: "${item.passage}"`) : null,
@@ -166,20 +181,30 @@ function renderQuestion() {
 
 function renderItems() {
   const pane = $("#items-pane");
-  pane.replaceChildren(el("h2", {}, "What the agent needs to know"));
+  const currentId = view.question && !view.finished ? view.question.item : null;
+  pane.replaceChildren(
+    el("h2", {}, "Brief in progress"),
+    el("p", { class: "doc-request" }, `Request: ${view.request}`),
+  );
   for (const heading of view.headings) {
     const items = view.items.filter((i) => i.heading === heading);
-    if (!items.length) continue;
+    pane.append(el("h3", {}, heading));
+    if (!items.length) {
+      pane.append(el("div", { class: "empty" }, "Nothing here yet."));
+      continue;
+    }
     const list = el("ul", { class: "items-list" });
     for (const it of items) {
-      list.append(el("li", {},
-        el("div", { class: "item-head" },
-          el("span", { class: `state ${stateClass(it.state)}` }, it.state),
-          el("span", {}, el("span", { class: "item-label" }, it.label), it.value ? el("span", { class: "item-value" }, `: ${it.value}`) : null)),
-        el("div", { class: "item-meta" }, `${it.stated_or_inferred} · ${it.must_hold_or_nice} · ${it.way}${it.document ? " · " + it.document : ""}`),
+      list.append(el("li", { class: it.id === currentId ? "current" : null, id: `item-${it.id}` },
+        el("span", { class: `state ${stateClass(it.state)}` }, it.state),
+        el("div", { class: "item-body" },
+          el("div", {}, el("span", { class: "item-label" }, it.label), it.value ? el("span", { class: "item-value" }, `: ${it.value}`) : null),
+          el("div", { class: "item-meta" }, `${it.stated_or_inferred} · ${it.must_hold_or_nice} · ${it.way}${it.document ? " · " + it.document : ""}${it.who_can_supply ? " · who can supply it: " + it.who_can_supply : ""}`),
+        ),
+        it.id === currentId ? el("span", { class: "now-tag" }, "this question") : null,
       ));
     }
-    pane.append(el("h3", {}, heading), list);
+    pane.append(list);
   }
 }
 

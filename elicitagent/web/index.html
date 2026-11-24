@@ -44,10 +44,15 @@
       </form>
     </section>
 
-    <section id="interview" hidden>
-      <div id="question-pane" class="card"></div>
-      <div id="items-pane" class="card"></div>
-      <div id="brief-pane" class="card" hidden></div>
+    <section id="interview" class="split" hidden>
+      <aside class="left">
+        <div id="question-pane" class="card"></div>
+        <div id="progress-pane" class="card small"></div>
+      </aside>
+      <section class="right">
+        <div id="items-pane" class="card doc"></div>
+        <div id="brief-pane" class="card" hidden></div>
+      </section>
     </section>
   </main>
   <script src="app.js"></script>
