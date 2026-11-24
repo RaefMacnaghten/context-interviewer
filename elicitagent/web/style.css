@@ -11,7 +11,7 @@
   --assumed: #9a6a00;
   --open: #2f5d8a;
   --conflict: #b23b3b;
-  --cannot: #5b4a8a;
+  --unavailable: #5b4a8a;
   --sim: #b23b3b;
   --radius: 10px;
 }
@@ -92,7 +92,7 @@ button.quiet { border-color: transparent; color: var(--muted); }
 .state.assumed { background: var(--assumed); }
 .state.open { background: var(--open); }
 .state.conflict { background: var(--conflict); }
-.state.cannot { background: var(--cannot); }
+.state.unavailable { background: var(--unavailable); }
 .items-list { list-style: none; padding: 0; margin: 0; }
 .items-list li { padding: 8px 0; border-top: 1px solid var(--line); }
 .item-head { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
@@ -104,8 +104,8 @@ button.quiet { border-color: transparent; color: var(--muted); }
 .cost { font-size: 13px; color: var(--muted); margin-top: 0; }
 .replies { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .replies input[type=text] { flex: 1 1 220px; margin: 0; }
-.nobody { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
-.nobody input { margin-top: 4px; }
+.cant-answer { margin-top: 12px; padding-top: 10px; border-top: 1px dashed var(--line); }
+.cant-answer input { margin-top: 4px; }
 pre.brief { white-space: pre-wrap; background: #fbfaf7; border: 1px solid var(--line); border-radius: 8px; padding: 12px; font-size: 13px; }
 button:disabled { opacity: .7; cursor: progress; }
 
@@ -191,3 +191,4 @@ button.why-toggle:hover, button.source-toggle:hover { text-decoration: underline
 .ctx { display: flex; gap: 6px; }
 .ctx .ln { flex: 0 0 2.2em; text-align: right; }
 .items-list .source { margin: 2px 0 0; }
+.items-list li .state { min-width: 0; flex: 0 0 136px; }

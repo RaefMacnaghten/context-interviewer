@@ -18,8 +18,10 @@ from .trace import GapTrace
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 # How an item can be handled overall. The first two are reading the folder, which comes before the ask
-# table; the ask table's three outcomes follow; "cannot be done" is set only by the person's reply.
+# table; the ask table's three outcomes follow; "not available here" is set only by the person's reply "I can't answer this".
 FIRST_LOOK = "read a file (first look)"
+NOT_AVAILABLE = "not available here"
+CANT_ANSWER = "I can't answer this"
 SECOND_LOOK = "read a file (second look)"
 DEFAULT_RUNS_DIR = REPO_ROOT / "runs"
 
@@ -56,7 +58,7 @@ class Item:
     source: str = ""  # "file", "person", "guess" or ""
     asked: bool = False
     pending: bool = False  # waiting in the question queue
-    who_can_supply: str | None = None
+    who_could: str | None = None
     # a clash (P11): the documents that disagree, each with its value and passage
     sources: list[dict] = field(default_factory=list)
     merged_from: list[str] = field(default_factory=list)
@@ -382,7 +384,11 @@ class Session:
         raise KeyError(item_id)
 
     def reply(self, item_id: str, action: str, value: str | None = None, who: str | None = None) -> Item:
-        """action: "answer", "skip" or "nobody can answer". Every reply costs the question (P12)."""
+        """action: "answer", "skip" or "I can't answer this". Every reply costs the question (P12).
+
+        Skip means not now: the item stays open. "I can't answer this" means asking this person again will not
+        help: the item becomes "not available here", with who could answer it if the person names someone.
+        """
         it = self.get(item_id)
         if not it.pending:
             raise ValueError(f"{item_id} is not waiting for a reply")
@@ -399,13 +405,13 @@ class Session:
             it.state, it.source = "confirmed", "person"
         elif action == "skip":
             it.state = "conflict" if it.sources else "open"
-        elif action == "nobody can answer":
-            it.state = "cannot be done"
-            it.way = "cannot be done"
-            it.who_can_supply = (who or "").strip() or None
+        elif action == CANT_ANSWER:
+            it.state = NOT_AVAILABLE
+            it.way = NOT_AVAILABLE
+            it.who_could = (who or "").strip() or None
         else:
             raise ValueError(f"unknown reply: {action}")
-        self._log(it, action, it.value if action == "answer" else (it.who_can_supply if action == "nobody can answer" else None))
+        self._log(it, action, it.value if action == "answer" else (it.who_could if action == CANT_ANSWER else None))
         self._check_limit()
         return it
 
@@ -432,11 +438,11 @@ class Session:
         elif action == "reject":
             it.rejected = True
             logged = None
-        elif action == "who can supply":
-            if it.state != "cannot be done":
-                raise ValueError("only a 'cannot be done' item has someone who needs to supply it")
-            it.who_can_supply = (value or "").strip() or None
-            logged = it.who_can_supply
+        elif action == "who could":
+            if it.state != NOT_AVAILABLE:
+                raise ValueError("only an item that is not available here has someone who could answer it")
+            it.who_could = (value or "").strip() or None
+            logged = it.who_could
         elif action == "restore":
             if not it.rejected:
                 raise ValueError("the item is not rejected")

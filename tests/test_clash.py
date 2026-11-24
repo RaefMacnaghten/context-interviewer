@@ -57,5 +57,5 @@ def test_skipped_clash_stays_in_conflict_and_is_in_ask_first(tmp_path):
     c = next(i for i in s.items if i.sources)
     assert c.state == "conflict"
     text = s.finish().read_text()
-    ask_first = text.split("## Ask first")[1].split("## Cannot be done")[0]
+    ask_first = text.split("## Ask first")[1].split("## Not available here")[0]
     assert "the documents disagree" in ask_first

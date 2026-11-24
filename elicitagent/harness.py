@@ -2,7 +2,7 @@
 
 For each question the script finds the answer-sheet row that matches the
 item (same heading, most words in common) and replies from it. A "nowhere" row
-is answered "nobody can answer this"; a question with no matching row is
+is answered "I can't answer this", naming who could; a question with no matching row is
 skipped. After the brief is written, each item is marked against its row:
 correct, wrong or left open for rows with an exact or yes-or-no answer;
 "to mark by hand" for free-text rows. A question whose answer the sheet says
@@ -110,7 +110,7 @@ def person_reply(it: Item, row: SheetRow | None) -> tuple[str, str | None, str |
     if row is None:
         return ("skip", None, None)
     if row.where.strip().lower() == "nowhere":
-        return ("nobody can answer", None, row.who or None)
+        return ("I can't answer this", None, row.who or None)
     if it.kind in ("confirm", "choose"):
         for c in it.candidates:
             if same_answer(c, row.answer):
@@ -121,8 +121,8 @@ def person_reply(it: Item, row: SheetRow | None) -> tuple[str, str | None, str |
 def mark(it: Item, row: SheetRow | None) -> str:
     if row is None:
         return "no answer-sheet row"
-    if it.state == "cannot be done":
-        return "cannot be done (planted)" if row.where.strip().lower() == "nowhere" else "cannot be done (wrongly)"
+    if it.state == "not available here":
+        return "not available here (planted)" if row.where.strip().lower() == "nowhere" else "not available here (wrongly)"
     if it.state in ("open", "conflict"):
         return "left open"
     form = row.form.strip().lower()

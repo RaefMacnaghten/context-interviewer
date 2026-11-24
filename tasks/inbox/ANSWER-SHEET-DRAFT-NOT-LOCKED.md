@@ -9,7 +9,7 @@ The tool never reads this file. Only the test harness does, to play the person a
 ## How the harness reads this sheet
 
 - One row per item. The harness matches a question to a row by heading and by the words in "Item".
-- "Where the answer lives" is one of: `file: <document>`, `head` (only in the person's head) or `nowhere`. A `nowhere` row is answered "nobody can answer this"; its "Who could supply it" column names who could.
+- "Where the answer lives" is one of: `file: <document>`, `head` (only in the person's head) or `nowhere`. A `nowhere` row is answered "I can't answer this", with its "Who could supply it" column as the answer to "Who could?".
 - Rows with form `exact` or `yes or no` are marked by script. Rows with form `free text` are left for the author to mark by hand.
 
 ## Rows (all AI-drafted suggestions)
@@ -39,7 +39,7 @@ The tool never reads this file. Only the test harness does, to play the person a
 
 ## What the plan needs this sheet to contain, and where this draft covers it
 
-- At least one item whose answer is nowhere: I19, the planted "cannot be done" gap.
+- At least one item whose answer is nowhere: I19, the planted "not available here" gap.
 - Items in each place: in the CSV (I06), in the notes file (I03, I09) and only in the person's head (I04, I12, I15).
 - At least one clash: I06. The notes file says book club meets on Thursdays; an email says it has moved to Wednesdays.
 - At least one fact about a named person: I04.

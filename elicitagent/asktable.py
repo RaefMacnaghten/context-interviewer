@@ -3,7 +3,8 @@
 A gap is an item still missing after the folder has been read (a first look,
 then one targeted second look). Items found in the folder never reach the ask
 table. The table has exactly three outcomes: ask, guess and mark it, or wait.
-"Cannot be done" is never an outcome here: only the person's reply sets it.
+"Not available here" is never an outcome here: only the person's reply
+"I can't answer this" sets it.
 
 The language model only estimates the chance a guess is wrong and answers the
 two yes-or-no checks. Everything in this module is fixed arithmetic over the

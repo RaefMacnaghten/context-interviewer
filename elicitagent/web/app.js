@@ -34,7 +34,7 @@ async function api(path, body) {
 }
 
 function stateClass(state) {
-  return state === "cannot be done" ? "cannot" : state;
+  return state === "not available here" ? "unavailable" : state;
 }
 
 // ---------------------------------------------------------------- start
@@ -260,7 +260,7 @@ function renderEndScreen(pane) {
   const live = view.items.filter((i) => !i.rejected);
   const waiting = live.filter((i) => i.state === "open" || i.state === "conflict");
   const assumed = live.filter((i) => i.state === "assumed");
-  const cannot = live.filter((i) => i.state === "cannot be done");
+  const unavailable = live.filter((i) => i.state === "not available here");
   const section = (title, note, items, extra) => items.length ? el("div", { class: "review-section" },
     el("h3", {}, `${title} (${items.length})`),
     el("p", { class: "muted small-note" }, note),
@@ -273,9 +273,9 @@ function renderEndScreen(pane) {
     el("p", { class: "muted" }, `No more questions. Asked ${view.question_count}, question cost ${view.running_cost}. Check the brief on the right once: confirm, edit or reject anything. Then write it.`),
     section("Waiting", "Not settled. The brief passes these to the agent as \"ask before you do this\".", waiting),
     section("Guessed and marked", "The tool guessed these. Confirm or edit any you can.", assumed),
-    section("Cannot be done", "Nobody here can supply these. Say who needs to.", cannot, (it) => {
-      const box = el("input", { type: "text", value: it.who_can_supply || "", placeholder: "Who needs to supply it?", "aria-label": `Who needs to supply ${it.label}` });
-      box.addEventListener("change", () => control(it.id, "who can supply", box.value));
+    section("Not available here", "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, (it) => {
+      const box = el("input", { type: "text", value: it.who_could || "", placeholder: "Who could?", "aria-label": `Who could answer: ${it.label}` });
+      box.addEventListener("change", () => control(it.id, "who could", box.value));
       return box;
     }),
     el("button", { class: "primary", onclick: finish }, "Write the brief"),
@@ -304,7 +304,7 @@ function briefHtml(md) {
 function renderProgress() {
   const counts = {};
   for (const it of view.items) counts[it.state] = (counts[it.state] || 0) + 1;
-  const order = ["confirmed", "assumed", "open", "conflict", "cannot be done"];
+  const order = ["confirmed", "assumed", "open", "conflict", "not available here"];
   $("#progress-pane").replaceChildren(
     el("div", {}, `Questions asked: ${view.question_count} · question cost ${view.running_cost}${view.limit !== null ? ` of ${view.limit}` : ""} · ${view.questions_left} waiting`),
     el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => el("span", { class: `state ${stateClass(s)}` }, `${counts[s]} ${s}`))),
@@ -355,7 +355,7 @@ function renderQuestion() {
   }
   replies.append(answerBox, el("button", { onclick: () => reply("answer", answerBox.value) }, q.kind === "open" ? "Answer" : "Something else"));
   replies.append(el("button", { class: "quiet", title: "The item stays open. The question still counts.", onclick: () => reply("skip") }, "Skip"));
-  const whoBox = el("input", { type: "text", placeholder: "Who could supply it? (optional)" });
+  const whoBox = el("input", { type: "text", placeholder: "Who could? (optional)", "aria-label": "Who could answer this? (optional)" });
   pane.append(...[
     el("p", { class: "cost" }, `Question ${view.question_count + 1} · ${q.kind} question · costs ${q.cost}`),
     el("p", { class: "question-text" }, q.text),
@@ -367,8 +367,8 @@ function renderQuestion() {
     clash,
     clash && item ? el("div", { class: "clash-sources" }, item.sources.map((src, i) => sourceView(`q-${item.id}-${i}`, src.document, src.passage, src.context))) : null,
     replies,
-    el("div", { class: "nobody" },
-      el("button", { onclick: () => reply("nobody can answer", null, whoBox.value) }, "Nobody can answer this"),
+    el("div", { class: "cant-answer" },
+      el("button", { title: "Asking you again will not help. The tool stops asking and records who to go to.", onclick: () => reply("I can't answer this", null, whoBox.value) }, "I can't answer this"),
       whoBox),
   ].filter(Boolean));
 }
@@ -394,7 +394,7 @@ function renderItems() {
         el("span", { class: `state ${stateClass(it.state)}` }, it.rejected ? "rejected" : it.state),
         el("div", { class: "item-body" },
           el("div", {}, el("span", { class: "item-label" }, it.label), it.value && it.state !== "conflict" ? el("span", { class: "item-value" }, `: ${it.value}`) : null),
-          el("div", { class: "item-meta" }, `${it.stated_or_inferred} · ${it.must_hold_or_nice} · ${it.way}${it.document ? " · " + it.document : ""}${it.who_can_supply ? " · who can supply it: " + it.who_can_supply : ""}${it.source === "person" ? " · settled by you" : ""}`),
+          el("div", { class: "item-meta" }, `${it.stated_or_inferred} · ${it.must_hold_or_nice} · ${it.way}${it.document ? " · " + it.document : ""}${it.who_could ? " · who could: " + it.who_could : ""}${it.source === "person" ? " · settled by you" : ""}`),
           it.sources && it.sources.length ? el("div", { class: "item-meta clash-note" },
             "Documents disagree: " + it.sources.map((src) => `${src.value} (${src.document})`).join(" vs ")) : null,
           it.passage ? sourceView(`i-${it.id}`, it.document, it.passage, it.context, true) : null,

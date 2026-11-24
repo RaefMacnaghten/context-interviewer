@@ -70,17 +70,17 @@ def test_end_screen_who_can_supply_is_traced_and_in_the_brief(s):
     alarm = next(i for i in s.items if "alarm" in i.label.lower())
     while (q := s.current_question()) is not None:
         if q.id == alarm.id:
-            s.reply(q.id, "nobody can answer")
+            s.reply(q.id, "I can't answer this")
         else:
             s.reply(q.id, "skip")
     with pytest.raises(ValueError):
-        s.control(s.items[0].id, "who can supply", "someone")
-    s.control(alarm.id, "who can supply", "the hall caretaker")
-    assert last(s)["event"] == "who can supply" and last(s)["value"] == "the hall caretaker"
+        s.control(s.items[0].id, "who could", "someone")
+    s.control(alarm.id, "who could", "the hall caretaker")
+    assert last(s)["event"] == "who could" and last(s)["value"] == "the hall caretaker"
     text = s.finish().read_text()
-    cannot = text.split("## Cannot be done")[1].split("## ")[0]
-    assert "Hall alarm code" in cannot and "the hall caretaker" in cannot
-    ask_first = text.split("## Ask first")[1].split("## Cannot be done")[0]
+    unavailable = text.split("## Not available here")[1].split("## ")[0]
+    assert "Hall alarm code" in unavailable and "Not available: ask the hall caretaker before acting." in unavailable
+    ask_first = text.split("## Ask first")[1].split("## Not available here")[0]
     assert "Kit Inventa" in ask_first  # skipped, so still waiting
 
 

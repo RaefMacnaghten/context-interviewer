@@ -6,8 +6,8 @@
 #
 # The ask table only sees gaps: items still missing after the folder has been
 # read (a first look, then one targeted second look). It has exactly three
-# outcomes: ask, guess and mark it, or wait. "Cannot be done" is set only by the
-# person's reply to a question.
+# outcomes: ask, guess and mark it, or wait. "Not available here" is set only by
+# the person's reply "I can't answer this" to a question.
 #
 # Harm and question cost share one unit: 1 is the cost of one "choose" question.
 

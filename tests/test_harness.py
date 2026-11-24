@@ -39,10 +39,10 @@ def test_matching_needs_real_overlap():
 def test_person_replies_from_the_sheet():
     r = rows()
     alarm = item("Hall alarm code for locking up", heading="Resources")
-    assert person_reply(alarm, match_row(alarm, r)) == ("nobody can answer", None, "the hall caretaker")
+    assert person_reply(alarm, match_row(alarm, r)) == ("I can't answer this", None, "the hall caretaker")
     lead = item("Who counts as a team lead", heading="People", value="Ada Testwell", kind="confirm", candidates=["Ada Testwell"])
     assert person_reply(lead, match_row(lead, r)) == ("answer", "Ada Testwell and Dev Placeholder", None)
-    assert person_reply(item("Something nobody wrote down"), None) == ("skip", None, None)
+    assert person_reply(item("Something left out of the sheet"), None) == ("skip", None, None)
 
 
 def test_same_answer_is_not_fooled_by_part_of_the_answer():

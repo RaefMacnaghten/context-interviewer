@@ -59,7 +59,7 @@ def test_passages_are_checked_against_the_documents(session):
 
 def test_replies_count_cost_and_are_traced(session):
     assert session.queue(), "the rota pass should ask something"
-    replies = [("answer", "Ada Testwell and Dev Placeholder"), ("skip", None), ("nobody can answer", None)]
+    replies = [("answer", "Ada Testwell and Dev Placeholder"), ("skip", None), ("I can't answer this", None)]
     done = []
     while len(done) < 3:
         q = session.current_question()
@@ -67,7 +67,7 @@ def test_replies_count_cost_and_are_traced(session):
             session.reply(q.id, "answer", q.candidates[0])
             continue
         action, value = replies[len(done)]
-        session.reply(q.id, action, value, who="someone" if action == "nobody can answer" else None)
+        session.reply(q.id, action, value, who="someone" if action == "I can't answer this" else None)
         done.append(q)
     first, second, third = done
     clash_cost = sum(i.cost for i in session.items if i.sources and i.asked)
@@ -76,9 +76,9 @@ def test_replies_count_cost_and_are_traced(session):
     assert session.running_cost == pytest.approx(first.cost + second.cost + third.cost + clash_cost)  # skip still costs (P12)
     assert first.state == "confirmed" and first.source == "person"
     assert second.state == "open"
-    assert third.state == "cannot be done" and third.who_can_supply == "someone"
+    assert third.state == "not available here" and third.way == "not available here" and third.who_could == "someone"
     events = [l["event"] for l in read_trace(session.trace.path)]
-    assert events[-3:] == ["answer", "skip", "nobody can answer"]
+    assert events[-3:] == ["answer", "skip", "I can't answer this"]
     last = read_trace(session.trace.path)[-1]
     assert last["question_count"] == 3 + asked_clash
 
@@ -89,7 +89,7 @@ def test_brief_is_written_and_labelled_simulated(session):
     path = session.finish()
     text = path.read_text()
     assert "SIMULATED MODEL" in text
-    assert "## Ask first" in text and "## Cannot be done" in text
+    assert "## Ask first" in text and "## Not available here" in text
     assert "Setup start time" in text
 
 
@@ -137,5 +137,22 @@ def test_second_look_hit_is_checked_against_the_document(tmp_path):
     assert not s._verified({"value": "23:00", "document": "hall-email.txt", "passage": "Please note that the hall must be empty and locked by 22:00."})
 
 
-def test_cannot_be_done_is_only_set_by_a_reply(session):
-    assert all(it.state != "cannot be done" for it in session.items)
+def test_not_available_here_is_only_set_by_a_reply(session):
+    assert all(it.state != "not available here" for it in session.items)
+
+
+def test_not_available_line_with_and_without_a_name(session):
+    named = unnamed = None
+    while (q := session.current_question()) is not None:
+        if named is None and not q.sources:
+            session.reply(q.id, "I can't answer this", who="the hall caretaker")
+            named = q
+        elif unnamed is None and not q.sources:
+            session.reply(q.id, "I can't answer this")
+            unnamed = q
+        else:
+            session.reply(q.id, "skip")
+    assert named.state == unnamed.state == "not available here"
+    text = session.finish().read_text()
+    assert f"**{named.label}** ({named.heading}). Not available: ask the hall caretaker before acting." in text
+    assert f"**{unnamed.label}** ({unnamed.heading}). Not available: find out before acting." in text

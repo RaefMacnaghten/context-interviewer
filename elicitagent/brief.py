@@ -25,8 +25,8 @@ def _source_note(it: "Item") -> str:
         return "assumed: guessed by the tool, check before relying on it"
     if it.state == "conflict":
         return "conflict: the documents disagree"
-    if it.state == "cannot be done":
-        return "cannot be done"
+    if it.state == "not available here":
+        return "not available here"
     return "open"
 
 
@@ -53,7 +53,7 @@ def write_brief(session: "Session") -> str:
     lines.append("")
 
     ask_first = [it for it in items if it.state in ("open", "conflict")]
-    cannot = [it for it in items if it.state == "cannot be done"]
+    unavailable = [it for it in items if it.state == "not available here"]
 
     lines.append("## Ask first")
     lines.append("")
@@ -69,12 +69,14 @@ def write_brief(session: "Session") -> str:
         lines.append("- Nothing.")
     lines.append("")
 
-    lines.append("## Cannot be done")
+    lines.append("## Not available here")
     lines.append("")
-    if cannot:
-        for it in cannot:
-            who = it.who_can_supply or "not known"
-            lines.append(f"- **{it.label}** ({it.heading}). Nobody here can supply it. Who needs to supply it: {who}.")
+    lines.append("The person could not answer these, and the folder does not hold them.")
+    lines.append("")
+    if unavailable:
+        for it in unavailable:
+            line = f"Not available: ask {it.who_could} before acting." if it.who_could else "Not available: find out before acting."
+            lines.append(f"- **{it.label}** ({it.heading}). {line}")
     else:
         lines.append("- Nothing.")
     lines.append("")

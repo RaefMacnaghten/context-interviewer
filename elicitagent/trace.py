@@ -1,7 +1,7 @@
 """The gap trace: the tool's own log, one JSON object per line.
 
 "way" records how each item was handled overall: read a file (first look),
-read a file (second look), ask, guess and mark it, wait, or cannot be done.
+read a file (second look), ask, guess and mark it, wait, or not available here.
 "outcome" and "waste" are filled in by the test: waste is true for a question
 whose answer the folder held.
 
@@ -55,12 +55,12 @@ EVENTS = [
     "decided",
     "answer",
     "skip",
-    "nobody can answer",
+    "I can't answer this",
     "confirm",
     "edit",
     "reject",
     "restore",
-    "who can supply",
+    "who could",
     "limit reached",
     "continue",
     "stop",
