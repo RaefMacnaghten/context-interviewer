@@ -157,6 +157,8 @@ class Handler(BaseHTTPRequestHandler):
             with LOCK:
                 if action == "reply":
                     s.reply(body["item"], body["action"], body.get("value"), body.get("who"))
+                elif action == "limit":
+                    s.limit_choice(body["action"])
                 elif action == "item":
                     s.control(body["item"], body["action"], body.get("value"))
                 elif action == "finish":
@@ -178,8 +180,12 @@ class Handler(BaseHTTPRequestHandler):
         try:
             model = make_model(body.get("model") or self.default_model, folder_path)
             threshold = body.get("threshold")
+            limit = body.get("limit", "default")
+            if limit in ("", "none", "off"):
+                limit = None
             s = Session(folder_path, request, model, rule=body.get("rule") or "cost-weighted",
-                        threshold=float(threshold) if threshold not in (None, "") else None).start()
+                        threshold=float(threshold) if threshold not in (None, "") else None,
+                        limit=limit if limit in (None, "default") else float(limit)).start()
         except ModelError as exc:
             return self._error(str(exc))
         except ValueError as exc:

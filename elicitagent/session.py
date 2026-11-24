@@ -133,6 +133,7 @@ class Session:
         threshold: float | None = None,
         runs_dir: str | Path | None = None,
         run_number: int | None = None,
+        limit: float | None | str = "default",
     ):
         self.id = uuid.uuid4().hex[:12]
         self.folder_path = Path(folder_path).resolve()
@@ -158,6 +159,10 @@ class Session:
         self.question_count = 0
         self.running_cost = 0.0
         self.limit_reached = False
+        # P9: the limit is counted in question cost and starts at the ask table's value. None switches it off.
+        self.limit = self.table.limit_start if limit == "default" else (float(limit) if limit is not None else None)
+        self._limit_logged_at: float | None = None
+        self.stopped = False
         self.finished = False
         self.brief_path: Path | None = None
         self.brief_text: str | None = None
@@ -190,6 +195,7 @@ class Session:
         for it in self.items:
             self._decide(it)
             self._log(it, "decided", it.value)
+        self._check_limit()
         return self
 
     def _normalise(self, raw: dict, index: int) -> Item:
@@ -268,11 +274,63 @@ class Session:
     # ------------------------------------------------------------ questions
 
     def queue(self) -> list[Item]:
-        return [it for it in self.items if it.pending and not it.rejected]
+        """Questions still to ask, most valuable first (P6): (chance wrong x harm) / cost, largest first."""
+        waiting = [it for it in self.items if it.pending and not it.rejected]
+        return sorted(waiting, key=lambda it: -it.value_order)
+
+    def at_limit(self) -> bool:
+        q = self.queue()
+        return bool(q) and self.limit is not None and self.running_cost + q[0].cost > self.limit + 1e-9
+
+    def still_needed(self) -> dict:
+        """P7: what the ask table says is still worth asking, from the model's estimates. A lower bound."""
+        q = self.queue()
+        return {"questions": len(q), "cost": sum(it.cost for it in q)}
 
     def current_question(self) -> Item | None:
+        if self.stopped or self.at_limit():
+            return None
         q = self.queue()
         return q[0] if q else None
+
+    def _check_limit(self) -> None:
+        if self.at_limit() and self._limit_logged_at != self.limit:
+            self.limit_reached = True
+            self._limit_logged_at = self.limit
+            need = self.still_needed()
+            self._log(self.queue()[0], "limit reached",
+                      f"limit {self.limit:g}; at least {need['questions']} more questions, question cost {need['cost']:g}")
+
+    def limit_choice(self, action: str) -> None:
+        """At the limit the person continues (another round of the starting limit) or stops (P7, P8)."""
+        if not self.at_limit():
+            raise ValueError("the question limit has not been reached")
+        head = self.queue()[0]
+        if action == "continue":
+            self.limit += self.table.limit_start
+            self._log(head, "continue", f"limit now {self.limit:g}")
+            self._check_limit()
+        elif action == "stop":
+            self._log(head, "stop", None)
+            self.stopped = True
+            for it in self.queue():
+                it.pending = False
+                # P8: anything that cannot be undone is left open, and so is any fact about a named person;
+                # the rest is guessed and marked. With nothing to guess from, it is left open too.
+                if not it.can_undo or it.named_person or not it.value:
+                    it.way = "wait"
+                    it.state = "conflict" if it.sources else "open"
+                    it.reason = "Left open when you stopped at the limit: " + (
+                        "a wrong guess could not be undone." if not it.can_undo
+                        else "personal facts about a named person are never guessed." if it.named_person
+                        else "there is nothing to guess from.")
+                else:
+                    it.way = "guess and mark it"
+                    it.state, it.source = "assumed", "guess"
+                    it.reason = "Guessed and marked when you stopped at the limit."
+                self._log(it, "stopped at limit", it.value)
+        else:
+            raise ValueError(f"unknown choice at the limit: {action}")
 
     def question_text(self, it: Item) -> str:
         if it.kind == "confirm":
@@ -292,6 +350,8 @@ class Session:
         it = self.get(item_id)
         if not it.pending:
             raise ValueError(f"{item_id} is not waiting for a reply")
+        if self.current_question() is not it:
+            raise ValueError(f"{item_id} is not the current question")
         it.pending = False
         it.asked = True
         self.question_count += 1
@@ -310,6 +370,7 @@ class Session:
         else:
             raise ValueError(f"unknown reply: {action}")
         self._log(it, action, it.value if action == "answer" else (it.who_can_supply if action == "nobody can answer" else None))
+        self._check_limit()
         return it
 
     # ------------------------------------------------------------ stage 4: confirm, edit, reject
@@ -350,6 +411,7 @@ class Session:
         if action != "restore" and it.pending:
             it.pending = False  # settled by the person without the question being asked
         self._log(it, action, logged)
+        self._check_limit()
         return it
 
     # ------------------------------------------------------------ finish
@@ -434,10 +496,13 @@ class Session:
             if q is None
             else {"item": q.id, "text": self.question_text(q), "kind": q.kind, "cost": q.cost, "reason": q.reason,
                   "candidates": q.candidates, "value": q.value, "sources": q.sources},
-            "questions_left": len(self.queue()),
+            "questions_left": 0 if self.stopped else len(self.queue()),
             "question_count": self.question_count,
             "running_cost": self.running_cost,
             "limit_reached": self.limit_reached,
+            "limit": self.limit,
+            "at_limit": self.still_needed() if (self.at_limit() and not self.stopped) else None,
+            "stopped": self.stopped,
             "finished": self.finished,
             "brief": self.brief_text,
             "run_dir": str(self.run_dir.relative_to(REPO_ROOT)) if self.run_dir.is_relative_to(REPO_ROOT) else str(self.run_dir),

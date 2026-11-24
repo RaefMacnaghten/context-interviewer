@@ -49,6 +49,7 @@ async function init() {
     ruleSelect.append(el("option", { value: r.name }, `${r.label}${thr}`));
   }
   $("#model-select").value = config.default_model;
+  $("#limit-input").value = config.limit_start;
   $("#start-form").addEventListener("submit", start);
   const m = location.hash.match(/^#s=([0-9a-f]+)$/);
   if (m) {
@@ -82,6 +83,7 @@ async function start(ev) {
       request: $("#request-input").value,
       rule: $("#rule-select").value,
       model: $("#model-select").value,
+      limit: $("#limit-input").value.trim() || "none",
     });
   } catch (e) {
     err.textContent = e.message;
@@ -162,6 +164,32 @@ function render() {
   if (current) current.scrollIntoView({ block: "nearest", behavior: "smooth" });
 }
 
+// P7 and P8: at the limit, say how much more seems needed, and let the person continue or stop.
+function renderLimit(pane) {
+  const need = view.at_limit;
+  const plural = need.questions === 1 ? "question" : "questions";
+  pane.append(
+    el("h2", {}, "You have reached your question limit"),
+    el("p", {}, `Your limit is ${view.limit} in question cost, and you have used ${view.running_cost}. ` +
+      `I think I need at least ${need.questions} more ${plural}, with a question cost of ${need.cost}.`),
+    el("p", { class: "muted small-note" }, "This is a lower bound: an answer can reveal a new gap. The most important questions came first."),
+    el("div", { class: "replies" },
+      el("button", { class: "primary", onclick: () => limitChoice("continue") }, `Continue (${config.limit_start} more)`),
+      el("button", { onclick: () => limitChoice("stop") }, "Stop here")),
+    el("p", { class: "muted small-note" }, "If you stop: anything that cannot be undone, and any fact about a named person, is left open for the agent to ask; the rest is guessed and marked assumed."),
+  );
+}
+
+async function limitChoice(action) {
+  try {
+    view = await api(`/api/session/${view.id}/limit`, { action });
+  } catch (e) {
+    alert(e.message);
+    return;
+  }
+  render();
+}
+
 // P10: one end screen. Review everything once, see what waits, then write the brief.
 function renderEndScreen(pane) {
   const live = view.items.filter((i) => !i.rejected);
@@ -213,7 +241,7 @@ function renderProgress() {
   for (const it of view.items) counts[it.state] = (counts[it.state] || 0) + 1;
   const order = ["confirmed", "assumed", "open", "conflict", "cannot be done"];
   $("#progress-pane").replaceChildren(
-    el("div", {}, `Questions asked: ${view.question_count} · question cost ${view.running_cost} · ${view.questions_left} waiting`),
+    el("div", {}, `Questions asked: ${view.question_count} · question cost ${view.running_cost}${view.limit !== null ? ` of ${view.limit}` : ""} · ${view.questions_left} waiting`),
     el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => el("span", { class: `state ${stateClass(s)}` }, `${counts[s]} ${s}`))),
     el("div", {}, `Read ${view.documents.length} documents: ${view.documents.join(", ")}`),
     view.skipped.length ? el("div", {}, `Not read: ${view.skipped.map((s) => `${s.name} (${s.reason})`).join("; ")}`) : "",
@@ -232,6 +260,10 @@ function renderQuestion() {
         el("a", { class: "button", href: `/api/session/${view.id}/gap-trace.jsonl` }, "Download the gap trace")),
       el("p", {}, el("a", { href: "/" , onclick: () => { location.hash = ""; } }, "Start another")),
     );
+    return;
+  }
+  if (view.at_limit) {
+    renderLimit(pane);
     return;
   }
   const q = view.question;

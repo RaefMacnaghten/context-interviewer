@@ -76,7 +76,7 @@ def test_replies_count_cost_and_are_traced(session):
 
 
 def test_brief_is_written_and_labelled_simulated(session):
-    for it in list(session.queue()):
+    while (it := session.current_question()) is not None:
         session.reply(it.id, "skip")
     path = session.finish()
     text = path.read_text()

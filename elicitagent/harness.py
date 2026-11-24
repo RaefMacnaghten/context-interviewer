@@ -140,7 +140,8 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
     sheet_path = Path(sheet) if sheet else find_sheet(task_dir)
     rows = parse_sheet(sheet_path)
     model = make_model(model_choice, materials)
-    session = Session(materials, request, model, rule=rule, threshold=threshold, runs_dir=runs_dir).start()
+    # P9: the question limit is switched off in the test.
+    session = Session(materials, request, model, rule=rule, threshold=threshold, runs_dir=runs_dir, limit=None).start()
 
     asked = []
     while (it := session.current_question()) is not None:
