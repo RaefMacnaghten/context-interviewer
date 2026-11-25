@@ -28,20 +28,36 @@ def test_both_sheets_parse_and_say_draft():
         assert len(parsed) >= 20
         assert any(r.where == "nowhere" for r in parsed)
         assert all(r.heading for r in parsed)
+        # every row's place is read as a document, the person's head or nowhere
+        assert all(r.where.startswith("file: ") or r.where in ("head", "nowhere") for r in parsed)
+
+
+def test_the_written_layout_is_read():
+    r = {row.id: row for row in rows()}
+    assert len(r) == 70
+    assert r["R23"].where == "file: event-plan.md"  # "event-plan.md: `Setup starts at 12:00. ...`"
+    assert r["R27"].where == "file: event-plan.md"  # "Clash between event-plan.md: ... and hall-email.txt: ..."
+    assert r["R16"].where == "head"  # "Only in the person's head (invented by the drafter). ..."
+    assert (r["R68"].where, r["R68"].who) == ("nowhere", "the hall caretaker")
+    assert r["R12"].form == "yes or no" and r["R12"].key_answer == "no"  # "No. Fenn Mockridge is 16 ..."
+    assert r["R08"].key_answer == "Ada Testwell"  # "Ada Testwell."
+    assert r["R08"].priority == "must hold"
 
 
 def test_matching_needs_real_overlap():
     r = rows()
-    assert match_row(item("Setup start time"), r).id == "R07"
-    assert match_row(item("Break for each volunteer", heading="Rules"), r) is None
+    assert match_row(item("Setup start time"), r).id == "R23"
+    assert match_row(item("Colour of the tablecloths", heading="Preferences"), r) is None
 
 
 def test_person_replies_from_the_sheet():
     r = rows()
     alarm = item("Hall alarm code for locking up", heading="Resources")
     assert person_reply(alarm, match_row(alarm, r)) == ("I can't answer this", None, "the hall caretaker")
-    lead = item("Who counts as a team lead", heading="People", value="Ada Testwell", kind="confirm", candidates=["Ada Testwell"])
-    assert person_reply(lead, match_row(lead, r)) == ("answer", "Ada Testwell and Dev Placeholder", None)
+    lead = item("Team lead for the door", heading="People", value="Ada Testwell", kind="confirm", candidates=["Ada Testwell"])
+    assert person_reply(lead, match_row(lead, r)) == ("answer", "Ada Testwell", None)
+    kit = item("When Kit is available", heading="People")
+    assert person_reply(kit, match_row(kit, r)) == ("answer", "From 16:00 until the end of pack down at 22:00", None)
     assert person_reply(item("Something left out of the sheet"), None) == ("skip", None, None)
 
 
@@ -54,14 +70,18 @@ def test_same_answer_is_not_fooled_by_part_of_the_answer():
 
 def test_marking():
     r = rows()
-    t = item("Setup start time", value="12:00")
+    t = item("Setup start time", value="12:00 to 14:00")
     assert mark(t, match_row(t, r)) == "correct"
     t.value = "13:00"
     assert mark(t, match_row(t, r)) == "wrong"
     t.state = "open"
     assert mark(t, match_row(t, r)) == "left open"
-    rule = item("Personal licence holder on every bar shift", heading="Rules", value="At least one on every bar shift")
-    assert mark(rule, match_row(rule, r)) == "to mark by hand"
+    fenn = item("Whether Fenn may work on the bar", heading="People", value="no")
+    assert mark(fenn, match_row(fenn, r)) == "correct"  # a yes-or-no row is marked on its first word
+    fenn.value = "Fenn does door only"
+    assert mark(fenn, match_row(fenn, r)) == "to mark by hand"  # a descriptive value against a yes-or-no row
+    how = item("How the licence rule is met in practice", heading="Rules", value="Basil all day")
+    assert mark(how, match_row(how, r)) == "to mark by hand"  # free text
 
 
 def test_waste_is_a_question_the_folder_could_have_answered():
@@ -71,7 +91,7 @@ def test_waste_is_a_question_the_folder_could_have_answered():
     asked_file = item("Setup start time", value="12:00")
     asked_file.asked = True
     assert is_waste(asked_file, match_row(asked_file, r)) is True
-    asked_head = item("Who counts as a team lead", heading="People")
+    asked_head = item("When Kit is available", heading="People")
     asked_head.asked = True
     assert is_waste(asked_head, match_row(asked_head, r)) is False
     not_asked = item("Setup start time", value="12:00")

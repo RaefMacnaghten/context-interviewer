@@ -39,19 +39,66 @@ class SheetRow:
     form: str
     tier: str
     priority: str
-    where: str
-    who: str
+    where: str  # "file: <document>", "head" or "nowhere"
+    who: str  # who could supply a "nowhere" answer, if the sheet says
+
+    @property
+    def key_answer(self) -> str:
+        """The part of the right answer the script marks against: "yes" or "no" for a yes-or-no row (the sheet
+        may explain after it), and the answer without its closing full stop otherwise."""
+        if self.form == "yes or no":
+            first = re.match(r"\s*(yes|no)\b", self.answer, re.IGNORECASE)
+            if first:
+                return first.group(1).lower()
+        return self.answer.strip().rstrip(".").strip()
+
+
+COLUMNS = {
+    "id": "id", "heading": "heading", "item": "item", "right answer": "answer", "form": "form",
+    "question tier": "tier", "must hold or nice if possible": "priority", "where the answer lives": "where",
+    "who could supply it": "who",
+}
+DOCUMENT = re.compile(r"([A-Za-z0-9_.\-]+\.(?:md|txt|csv|pdf|json|py))")
+
+
+def _place(cell: str) -> tuple[str, str]:
+    """The sheet's "where the answer lives" cell as (place, who could supply it). Two layouts are read: a short
+    one ("file: <document>", "head", "nowhere") and a written one ("<document>: `passage`", "Clash between
+    <document>: ...", "Only in the person's head ...", "Nowhere ... Who could supply it: <who>. ...")."""
+    text = cell.strip()
+    low = text.lower()
+    who = re.search(r"who could supply it:\s*(.+?)(?:\.\s|\.$|$)", text, re.IGNORECASE)
+    who_text = who.group(1).strip() if who else ""
+    if low.startswith("nowhere"):
+        return "nowhere", who_text
+    if low.startswith("head") or low.startswith("only in the person's head"):
+        return "head", ""
+    if low.startswith("file:"):
+        return "file: " + text[5:].strip(), ""
+    doc = DOCUMENT.search(text)
+    return ("file: " + doc.group(1), "") if doc else (text, "")
 
 
 def parse_sheet(path: str | Path) -> list[SheetRow]:
-    rows = []
+    """Every row of the sheet's table. Columns are found by their header names, so the order and any extra
+    columns do not matter."""
+    rows: list[SheetRow] = []
+    index: dict[str, int] | None = None
     for line in Path(path).read_text(encoding="utf-8").splitlines():
         if not line.startswith("|"):
             continue
         cells = [c.strip() for c in line.strip().strip("|").split("|")]
-        if len(cells) < 9 or cells[0] in ("Id", "") or set(cells[0]) <= set("-: "):
+        names = [COLUMNS.get(c.lower()) for c in cells]
+        if "id" in names and "answer" in names:
+            index = {n: i for i, n in enumerate(names) if n}
             continue
-        rows.append(SheetRow(*cells[:9]))
+        if index is None or not cells[0] or set(cells[0]) <= set("-: "):
+            continue
+        get = lambda name: cells[index[name]] if name in index and index[name] < len(cells) else ""
+        place, who = _place(get("where"))
+        rows.append(SheetRow(id=get("id"), heading=get("heading"), item=get("item"), answer=get("answer"),
+                             form=get("form").lower(), tier=get("tier").lower(), priority=get("priority").lower(),
+                             where=place, who=get("who") or who))
     return rows
 
 
@@ -113,9 +160,9 @@ def person_reply(it: Item, row: SheetRow | None) -> tuple[str, str | None, str |
         return ("I can't answer this", None, row.who or None)
     if it.kind in ("confirm", "choose"):
         for c in it.candidates:
-            if same_answer(c, row.answer):
+            if same_answer(c, row.key_answer):
                 return ("answer", c, None)
-    return ("answer", row.answer, None)
+    return ("answer", row.key_answer, None)
 
 
 def mark(it: Item, row: SheetRow | None) -> str:
@@ -132,7 +179,7 @@ def mark(it: Item, row: SheetRow | None) -> str:
         return "to mark by hand"
     if form == "yes or no" and not ({"yes", "no", "y", "n", "true", "false"} & set(_norm(it.value).split())):
         return "to mark by hand"  # a descriptive value against a yes-or-no row needs a person to judge
-    return "correct" if same_answer(it.value, row.answer) else "wrong"
+    return "correct" if same_answer(it.value, row.key_answer) else "wrong"
 
 
 def is_waste(it: Item, row: SheetRow | None) -> bool | None:
