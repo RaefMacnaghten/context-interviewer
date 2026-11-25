@@ -49,3 +49,13 @@ def test_the_brief_can_be_filtered_by_status():
     assert '"aria-pressed"' in body and "Hide confirmed" in body and "hiddenStates" in body
     items = _function(js, "renderItems")
     assert "briefFilter(order, counts)" in items and "hiddenStates.has(" in items and "hidden by the filter" in items
+
+
+def test_the_question_card_has_a_back_button():
+    # the author's request of 25 Nov 2026: "There should be a back button to go back on questions."
+    js = APP.read_text(encoding="utf-8")
+    q = _function(js, "renderQuestion")
+    assert q.count("backButton()") == 3  # on the question card, the limit screen and the review screen
+    revisit = _function(js, "renderRevisit")
+    assert "revise(a, " in revisit and "does not count as a new question" in revisit
+    assert "/revise`" in _function(js, "revise")

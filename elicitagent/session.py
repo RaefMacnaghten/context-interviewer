@@ -80,6 +80,10 @@ class Item:
     rejected: bool = False
     # the clash between the person's intent and the folder's goal: asked before anything else
     ask_first: bool = False
+    # the person's reply to the question ("answer", "skip" or "I can't answer this"), and what the item was before
+    # it, so the Back button can show the reply and replace it
+    reply_action: str | None = None
+    before_reply: dict | None = None
 
     @property
     def stated_or_inferred(self) -> str:
@@ -227,6 +231,7 @@ class Session:
         self.items: list[Item] = []
         self.question_count = 0
         self.running_cost = 0.0
+        self.asked_order: list[str] = []  # item ids, in the order their questions were asked
         self.limit_reached = False
         # Plan change 2: the limit is a number of questions and starts at the ask table's value. None switches it
         # off. Question cost is still counted, for the rule, the gap trace and the "why this question" panel.
@@ -701,26 +706,67 @@ class Session:
             raise ValueError(f"{item_id} is not waiting for a reply")
         if self.current_question() is not it:
             raise ValueError(f"{item_id} is not the current question")
+        if action == "answer" and (value is None or not str(value).strip()):
+            raise ValueError("an answer needs a value")
+        if action not in ("answer", "skip", CANT_ANSWER):
+            raise ValueError(f"unknown reply: {action}")
         it.pending = False
         it.asked = True
         self.question_count += 1
         self.running_cost += it.cost
+        self.asked_order.append(it.id)
+        it.before_reply = {"value": it.value, "way": it.way, "source": it.source, "who_could": it.who_could}
+        self._apply_reply(it, action, value, who)
+        self._log(it, action, it.value if action == "answer" else (it.who_could if action == CANT_ANSWER else None))
+        self._check_limit()
+        return it
+
+    def _apply_reply(self, it: Item, action: str, value: str | None, who: str | None) -> None:
+        """Set the item from the person's reply, starting from what it was before the question was asked."""
+        before = it.before_reply or {}
+        it.value, it.way = before.get("value"), before.get("way", it.way)
+        it.source, it.who_could = before.get("source", ""), before.get("who_could")
+        it.reply_action = action
         if action == "answer":
-            if value is None or not str(value).strip():
-                raise ValueError("an answer needs a value")
             it.value = str(value).strip()
             it.state, it.source = "confirmed", "person"
         elif action == "skip":
             it.state = "conflict" if it.sources else "open"
-        elif action == CANT_ANSWER:
+        else:  # "I can't answer this"
             it.state = NOT_AVAILABLE
             it.way = NOT_AVAILABLE
             it.who_could = (who or "").strip() or None
-        else:
+
+    def revise(self, item_id: str, action: str, value: str | None = None, who: str | None = None) -> Item:
+        """The Back button: replace the reply to a question already asked. It is not a new question, so the count,
+        the question cost and the limit stay as they are. Everything shown is worked out again from the items, so
+        the brief in progress, Still open and the lists follow the new reply."""
+        self._not_finished()
+        it = self.get(item_id)
+        if not it.asked or it.id not in self.asked_order:
+            raise ValueError(f"{item_id} has not been asked")
+        if action == "answer" and (value is None or not str(value).strip()):
+            raise ValueError("an answer needs a value")
+        if action not in ("answer", "skip", CANT_ANSWER):
             raise ValueError(f"unknown reply: {action}")
-        self._log(it, action, it.value if action == "answer" else (it.who_could if action == CANT_ANSWER else None))
-        self._check_limit()
+        if it.rejected:
+            raise ValueError(f"{item_id} was rejected; restore it first")
+        it.answered_on_review = False
+        self._apply_reply(it, action, value, who)
+        self._log(it, f"revise: {action}", it.value if action == "answer" else (it.who_could if action == CANT_ANSWER else None))
         return it
+
+    def asked_view(self) -> list[dict]:
+        """The questions already asked, in order, each with the reply now standing, for the Back button."""
+        out = []
+        for n, item_id in enumerate(self.asked_order, start=1):
+            it = self.get(item_id)
+            out.append({"number": n, "item": it.id, "label": it.label, "text": self.question_text(it), "kind": it.kind,
+                        "reply": it.reply_action, "value": it.value if it.reply_action == "answer" else None,
+                        "who": it.who_could, "candidates": it.candidates, "sources": it.sources,
+                        "confirm_value": (it.before_reply or {}).get("value") or (it.candidates[0] if len(it.candidates) == 1 else None),
+                        "reason": it.reason})
+        return out
 
     def answer_on_review(self, item_id: str, value: str | None) -> Item:
         """Plan change 1: on the end screen the person can answer any item that is waiting or open. No question
@@ -941,6 +987,7 @@ class Session:
                   "sources": q.sources},
             "questions_left": 0 if (self.stopped or not ready) else len(self.queue()),
             "question_count": self.question_count,
+            "asked": self.asked_view() if ready else [],
             "running_cost": self.running_cost,
             "limit_reached": self.limit_reached,
             "limit": self.limit,

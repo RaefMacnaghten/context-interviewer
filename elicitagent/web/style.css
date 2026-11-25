@@ -169,6 +169,9 @@ label.ph { display: block; cursor: text; }
 .q-card { border: 1.5px solid var(--accent); padding: 16px; }
 .q-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12.5px; }
 .q-num { font-weight: 700; color: var(--muted); }
+.revisit-note { margin: 0 0 10px; }
+.reply-now { font-size: 13px; font-weight: 650; margin: 6px 0 10px; }
+.opt.chosen { border-color: var(--accent); }
 .qq { font-size: 17px; font-weight: 750; line-height: 1.3; letter-spacing: -.01em; margin: 0 0 8px; }
 .q-why { font-size: 12.5px; color: var(--accent-text); background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; margin: 0 0 12px; }
 .opts { display: grid; gap: 6px; margin: 10px 0; }

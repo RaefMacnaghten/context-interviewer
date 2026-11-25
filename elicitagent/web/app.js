@@ -5,6 +5,7 @@ let config = null;
 let view = null;
 let editing = null; // id of the item being edited
 let whyOpen = false; // the "why this question" panel
+let backAt = null; // the Back button: which earlier question is shown (an index into view.asked), or null
 const openSources = new Set(); // item ids whose source passage is expanded
 const hiddenStates = new Set(); // the brief filter: statuses whose items are hidden (display only)
 
@@ -618,13 +619,20 @@ function renderQuestion() {
     );
     return;
   }
+  if (backAt !== null && view.asked && view.asked[backAt]) {
+    renderRevisit(pane, view.asked[backAt]);
+    return;
+  }
+  backAt = null;
   if (view.at_limit) {
     renderLimit(pane);
+    pane.querySelector(".ph").append(backButton());
     return;
   }
   const q = view.question;
   if (!q) {
     renderEndScreen(pane);
+    pane.querySelector(".ph").append(backButton());
     return;
   }
   pane.className = "panel q-pane q-card";
@@ -661,6 +669,7 @@ function renderQuestion() {
       el("span", { class: "q-num" }, `Question ${view.question_count + 1}`),
       el("span", { class: "kind" }, `${q.kind} question`),
       el("span", { class: "sp" }),
+      backButton(),
       el("button", { class: `b sm why-toggle ${whyOpen ? "on" : ""}`, "aria-expanded": whyOpen ? "true" : "false", onclick: () => { whyOpen = !whyOpen; render(); } },
         whyOpen ? "Hide why" : "Why this question?")),
     el("p", { class: "question-text qq" }, q.text),
@@ -680,6 +689,68 @@ function renderQuestion() {
     pane.after(box);
     renderWhy(box, q.item);
   }
+}
+
+// ---------------------------------------------------------------- Back: an earlier question, its reply changeable
+
+function backButton() {
+  if (!view.asked || !view.asked.length) return null;
+  return el("button", { class: "b sm back", title: "See the question before, with the reply you gave. Changing it does not count as a new question.",
+    onclick: () => { backAt = backAt === null ? view.asked.length - 1 : Math.max(0, backAt - 1); whyOpen = false; render(); } }, "← Back");
+}
+
+function replyWords(a) {
+  if (a.reply === "answer") return `You answered: "${a.value}"`;
+  if (a.reply === "skip") return "You skipped it.";
+  return a.who ? `You could not answer it, and said to ask ${a.who}.` : "You could not answer it.";
+}
+
+async function revise(a, action, value, who) {
+  try {
+    view = await api(`/api/session/${view.id}/revise`, { item: a.item, action, value, who });
+  } catch (e) {
+    alert(e.message);
+    return;
+  }
+  backAt = null; // the reply is replaced: back to where the interview had got to
+  render();
+}
+
+function renderRevisit(pane, a) {
+  pane.className = "panel q-pane q-card revisit";
+  const n = view.asked.length;
+  const answerBox = el("input", { type: "text", value: a.reply === "answer" ? a.value : "", placeholder: "Type your answer", "aria-label": "Your answer" });
+  const whoBox = el("input", { type: "text", value: a.who || "", placeholder: "Who could? (optional)", "aria-label": "Who could answer this? (optional)" });
+  const opts = el("div", { class: "opts" });
+  const picked = (v) => a.reply === "answer" && a.value === v;
+  if (a.kind === "confirm" && a.confirm_value) {
+    opts.append(el("button", { class: `opt pick ${picked(a.confirm_value) ? "chosen" : ""}`, onclick: () => revise(a, "answer", a.confirm_value) },
+      el("span", { class: "rd", "aria-hidden": "true" }), el("span", {}, "Yes, that is right")));
+  }
+  const choices = a.kind === "choose" ? (a.sources && a.sources.length ? a.sources.map((src) => src.value) : a.candidates) : [];
+  for (const c of [...new Set(choices)]) {
+    opts.append(el("button", { class: `opt ${picked(c) ? "chosen" : ""}`, onclick: () => revise(a, "answer", c) },
+      el("span", { class: "rd", "aria-hidden": "true" }), el("span", {}, c)));
+  }
+  pane.append(...[
+    el("div", { class: "q-head" },
+      el("span", { class: "q-num" }, `Question ${a.number} of ${n} asked`),
+      el("span", { class: "kind" }, `${a.kind} question`),
+      el("span", { class: "sp" }),
+      a.number > 1 ? el("button", { class: "b sm", onclick: () => { backAt -= 1; render(); } }, "← Earlier") : null,
+      a.number < n ? el("button", { class: "b sm", onclick: () => { backAt += 1; render(); } }, "Later →") : null),
+    el("p", { class: "callout quiet revisit-note" }, "You are looking back. Change the reply if you want to: it replaces the one you gave and does not count as a new question."),
+    el("p", { class: "question-text qq" }, a.text),
+    el("p", { class: "reason q-why" }, a.reason),
+    el("p", { class: "reply-now" }, replyWords(a)),
+    opts.childNodes.length ? opts : null,
+    el("div", { class: "typed" }, answerBox, el("button", { class: "b", onclick: () => revise(a, "answer", answerBox.value) }, a.reply === "answer" ? "Change the answer" : "Answer")),
+    el("div", { class: "brow replies" },
+      a.reply !== "skip" ? el("button", { class: "b", onclick: () => revise(a, "skip") }, "↷ Skip instead") : null),
+    el("div", { class: "cant-answer" },
+      el("button", { class: "b", onclick: () => revise(a, "I can't answer this", null, whoBox.value) }, "⊘ I can't answer this"), whoBox),
+    el("div", { class: "brow" }, el("button", { class: "b pr", onclick: () => { backAt = null; render(); } }, "Back to where you were")),
+  ].filter(Boolean));
 }
 
 // Display only: the "Still open" block at the top of the brief in progress, on the main screen and beside the end

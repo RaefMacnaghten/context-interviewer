@@ -213,6 +213,8 @@ class Handler(BaseHTTPRequestHandler):
                     s.limit_choice(body["action"])
                 elif action == "item":
                     s.control(body["item"], body["action"], body.get("value"))
+                elif action == "revise":
+                    s.revise(body["item"], body["action"], body.get("value"), body.get("who"))
                 elif action == "review":
                     s.answer_on_review(body["item"], body.get("value"))
                 elif action == "finish":
