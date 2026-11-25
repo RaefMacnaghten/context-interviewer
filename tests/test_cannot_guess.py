@@ -258,7 +258,7 @@ def test_skipped_and_cannot_answer_items_go_to_their_lists(tmp_path):
     s.limit_choice("stop")
     text = s.finish().read_text()
     ask_first = text.split("## Ask first\n", 1)[1].split("\n## ", 1)[0]
-    unavailable = text.split("## Not available here\n", 1)[1].split("\n## ", 1)[0]
+    unavailable = text.split("## Ask someone else\n", 1)[1].split("\n## ", 1)[0]
     assert "**Colour of the bunting**" in ask_first and "**Time the fete closes**" in ask_first
     assert "**Music on the green**" in unavailable and "ask the vicar" in unavailable
     assert "**Music on the green**" not in ask_first

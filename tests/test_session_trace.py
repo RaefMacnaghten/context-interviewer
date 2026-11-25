@@ -90,7 +90,7 @@ def test_brief_is_written_and_labelled_simulated(session):
     path = session.finish()
     text = path.read_text()
     assert "SIMULATED MODEL" in text
-    assert "## Ask first" in text and "## Not available here" in text
+    assert "## Ask first" in text and "## Ask someone else" in text
     assert "Setup start time" in text
 
 
@@ -181,7 +181,7 @@ def test_typed_intent_is_the_first_goal_item_with_the_person_as_source(session):
     assert line["source_passage"] == intent and line["value"] == intent
     goal = session.finish().read_text().split("## Goal and deliverable")[1].split("## ")[0]
     # display order puts assumed items before confirmed ones, so the intent is in the section, not necessarily first
-    assert f"- **What the agent should do**: {intent} _(must hold; confirmed by the person)_" in goal.strip().splitlines()
+    assert f"- **What the agent should do**: {intent} _(required; confirmed by the person)_" in goal.strip().splitlines()
 
 
 def test_empty_box_works_out_the_goal_from_the_folder(tmp_path):
@@ -221,7 +221,7 @@ def test_intent_that_differs_from_the_folders_goal_is_a_clash(tmp_path):
 def test_intent_left_open_shows_both_sides_in_the_brief(tmp_path):
     intent = "Draft the rota and show it to me first."
     s = Session(ROTA, intent, SimulatedModel.for_folder(ROTA), runs_dir=tmp_path).start()
-    ask_first = s.finish().read_text().split("## Ask first")[1].split("## Not available here")[0]
+    ask_first = s.finish().read_text().split("## Ask first")[1].split("## Ask someone else")[0]
     assert "**What the agent should do**" in ask_first
     assert f"the person's intent and the folder disagree: {intent} from the person; " in ask_first
 

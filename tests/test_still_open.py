@@ -112,7 +112,7 @@ def test_the_brief_starts_with_still_open_linking_to_each_heading(tmp_path):
     s = make(tmp_path)
     text = s.finish().read_text()
     sections = re.findall(r"^## (.+)$", text, re.M)
-    assert sections[0] == "Still open" and sections[1:3] == ["Ask first", "Not available here"]
+    assert sections[0] == "Still open" and sections[1:3] == ["Ask first", "Ask someone else"]
     block = section(text, "Still open")
     assert "The two sections after this say what to do about each" in block
     lines = [l for l in block.splitlines() if l.startswith("- ")]
@@ -169,3 +169,32 @@ def test_the_page_builds_the_block_in_one_place_only():
 def test_the_written_brief_has_one_still_open_section(tmp_path):
     text = make(tmp_path).finish().read_text()
     assert text.count("## Still open\n") == 1
+
+
+def test_the_three_display_labels_live_in_one_place_and_the_brief_uses_them(tmp_path):
+    # the author's request of 25 Nov 2026: plainer words, display only; internal values keep their names
+    from elicitagent import labels
+
+    assert labels.DISPLAY == {"must hold": "Required", "nice if possible": "Optional",
+                              "not available here": "Ask someone else"}
+    s = Session(ROTA, "", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, limit=None).start()
+    n = 0
+    while (q := s.current_question()) is not None:
+        s.reply(q.id, "I can't answer this" if n == 0 else "skip", who="the caretaker" if n == 0 else None)
+        n += 1
+    text = s.finish().read_text()
+    assert "## Ask someone else" in text and "## Not available here" not in text
+    assert "Not available: ask the caretaker before acting." in text  # the line keeps its meaning
+    assert "must hold" not in text and "nice if possible" not in text and "(ask someone else, " in text
+    assert "(open, required)" in text or "(open, optional)" in text
+    # the gap trace keeps the internal words
+    trace = s.trace.path.read_text()
+    assert '"must_hold_or_nice": "must hold"' in trace or '"must_hold_or_nice": "nice if possible"' in trace
+
+
+def test_the_page_takes_the_labels_from_the_server():
+    js = (Path(__file__).resolve().parent.parent / "elicitagent" / "web" / "app.js").read_text()
+    assert "config.labels" in js
+    # no displayed "must hold", "nice if possible" or "Not available here" written into the page itself
+    for word in ('"Not available here"', ">must hold<", "`${it.must_hold_or_nice}`"):
+        assert word not in js

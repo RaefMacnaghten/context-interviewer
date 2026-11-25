@@ -78,9 +78,9 @@ def test_end_screen_who_can_supply_is_traced_and_in_the_brief(s):
     s.control(alarm.id, "who could", "the hall caretaker")
     assert last(s)["event"] == "who could" and last(s)["value"] == "the hall caretaker"
     text = s.finish().read_text()
-    unavailable = text.split("## Not available here")[1].split("## ")[0]
+    unavailable = text.split("## Ask someone else")[1].split("## ")[0]
     assert "Hall alarm code" in unavailable and "Not available: ask the hall caretaker before acting." in unavailable
-    ask_first = text.split("## Ask first")[1].split("## Not available here")[0]
+    ask_first = text.split("## Ask first")[1].split("## Ask someone else")[0]
     assert "Kit Inventa" in ask_first  # skipped, so still waiting
 
 

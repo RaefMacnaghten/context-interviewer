@@ -35,8 +35,19 @@ async function api(path, body) {
 
 const STATE_GLYPH = { confirmed: "✓", assumed: "~", open: "?", conflict: "!", "not available here": "⊘",
   listed: "·", "looking again": "·", estimating: "·", rejected: "×" };
+// The words the person sees for three internal values ("must hold", "nice if possible", "not available here") come
+// from the server's one list (elicitagent/labels.py), so a rename is one edit there.
+function shown(word) {
+  return (config && config.labels && config.labels[word]) || word;
+}
+function shownLower(word) {
+  const w = shown(word);
+  return w === word ? w : w.toLowerCase();
+}
+
 function stateChip(state, text) {
-  const label = text || (state.charAt(0).toUpperCase() + state.slice(1));
+  const w = shown(state);
+  const label = text || (w.charAt(0).toUpperCase() + w.slice(1));
   return el("span", { class: `chip st-${stateClass(state)}` }, el("span", { class: "glyph", "aria-hidden": "true" }, STATE_GLYPH[state] || "·"), label);
 }
 
@@ -514,7 +525,7 @@ function renderEndScreen(pane) {
     el("ul", { class: "review-list" }, items.map((it) => el("li", { class: `rv st-${stateClass(state || it.state)}` },
       el("a", { href: `#item-${it.id}`, onclick: (ev) => { ev.preventDefault(); document.getElementById(`item-${it.id}`).scrollIntoView({ block: "center", behavior: "smooth" }); } }, it.label),
       it.value && it.state === "assumed" ? el("span", { class: "muted" }, `: ${it.value}`) : null,
-      it.state === "open" || it.state === "conflict" ? el("span", { class: `tag ${it.must_hold_or_nice === "must hold" ? "must" : "nice"} rv-tag` }, it.must_hold_or_nice) : null,
+      it.state === "open" || it.state === "conflict" ? el("span", { class: `tag ${it.must_hold_or_nice === "must hold" ? "must" : "nice"} rv-tag` }, shown(it.must_hold_or_nice)) : null,
       extra ? extra(it) : null)))) : null;
   pane.className = "panel q-pane";
   pane.append(
@@ -524,7 +535,7 @@ function renderEndScreen(pane) {
       el("p", {}, `No more questions. Asked ${view.question_count}. Check the brief in progress once: confirm, edit or reject anything. Then write it.`),
       section("Waiting", "Not settled. Answer any you can here; the brief passes the rest to the agent as \"ask before you do this\".", waiting, null, reviewAnswer),
       section("Guessed and marked", "The tool guessed these. Confirm or edit any you can.", assumed, "assumed"),
-      section("Not available here", "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, "not available here", (it) => {
+      section(shown("not available here"), "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, "not available here", (it) => {
         const box = el("input", { type: "text", value: it.who_could || "", placeholder: "Who could?", "aria-label": `Who could answer: ${it.label}` });
         box.addEventListener("change", () => control(it.id, "who could", box.value));
         return box;
@@ -561,7 +572,7 @@ function renderProgress() {
   const order = ["confirmed", "assumed", "open", "conflict", "not available here"];
   $("#progress-pane").replaceChildren(el("div", { class: "pb" }, ...[
     el("div", {}, `Questions asked: ${view.question_count}${view.limit !== null ? ` of ${view.limit}` : ""} · ${view.questions_left} waiting`),
-    el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => stateChip(s, `${counts[s]} ${s}`))),
+    el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => stateChip(s, `${counts[s]} ${shownLower(s)}`))),
     el("div", {}, `Read ${view.documents.length} documents: `, ...view.documents.flatMap((d, i) => [i ? " " : "", el("span", { class: "src" }, d)])),
     view.skipped.length ? el("div", {}, `Not read: ${view.skipped.map((s) => `${s.name} (${s.reason})`).join("; ")}`) : null,
   ].filter(Boolean)));
@@ -673,7 +684,7 @@ function stillOpenBlock() {
       stateChip(it.state),
       el("div", {},
         el("a", { href: `#item-${it.id}`, onclick: (ev) => { ev.preventDefault(); goToItem(it.id); } }, it.label),
-        el("div", { class: "so-where" }, `${it.heading} · ${it.must_hold_or_nice}`))))));
+        el("div", { class: "so-where" }, `${it.heading} · ${shown(it.must_hold_or_nice)}`))))));
   }
   return box;
 }
@@ -692,7 +703,7 @@ function renderItems() {
   const body = el("div", { class: "pb" });
   pane.append(body);
   body.append(stillOpenBlock());
-  if (!reading) body.append(el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => stateChip(s, `${counts[s]} ${s}`))));
+  if (!reading) body.append(el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => stateChip(s, `${counts[s]} ${shownLower(s)}`))));
   if (!view.intent && !reading) body.append(el("p", { class: "callout quiet doc-request" }, "You did not say what you want the agent to do, so the goal comes from the folder."));
   for (const heading of view.headings) {
     const items = view.items.filter((i) => i.heading === heading);
@@ -708,16 +719,15 @@ function renderItems() {
       const said = it.way === "said by the person";
       const tags = [
         el("span", { class: `tag ${said ? "you" : it.stated_or_inferred}` }, said ? "your intent" : it.stated_or_inferred),
-        el("span", { class: `tag ${it.must_hold_or_nice === "must hold" ? "must" : "nice"}` }, it.must_hold_or_nice),
+        el("span", { class: `tag ${it.must_hold_or_nice === "must hold" ? "must" : "nice"}` }, shown(it.must_hold_or_nice)),
         it.answered_on_review ? el("span", { class: "tag way" }, "answered on review")
           : it.way ? el("span", { class: "tag way" }, it.way) : null,
         it.document ? el("span", { class: "src" }, it.document) : null,
-        it.who_could ? el("span", { class: "tag" }, `who could: ${it.who_could}`) : null,
         it.source === "person" && !said ? el("span", { class: "src you" }, "settled by you") : null,
         it.id === currentId ? el("span", { class: "now-tag" }, "this question") : null,
       ].filter(Boolean);
       list.append(el("li", { class: classes, id: `item-${it.id}` },
-        stateChip(state, it.rejected ? "Rejected" : null),
+        stateChip(state, it.rejected ? "Rejected" : (state === "not available here" && it.who_could ? `${shown(state)}: ${it.who_could}` : null)),
         el("div", { class: "tx" }, el("span", { class: "item-label" }, it.label), it.value && it.state !== "conflict" ? el("span", { class: "item-value" }, `: ${it.value}`) : null),
         editing === it.id || reading ? null : itemControls(it),
         el("div", { class: "mt" }, tags),
