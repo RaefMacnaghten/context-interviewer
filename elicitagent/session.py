@@ -112,6 +112,11 @@ def _short(text: str | None, most: int = 100) -> str:
     return (cut[:space] if space > most // 2 else cut).rstrip(" ,;:.") + "…"
 
 
+def _quoted(lead: str, text: str) -> str:
+    """A sentence ending in a quotation: no second full stop after a quotation that already ends a sentence."""
+    return f'{lead} "{text}"' + ("" if text[-1:] in ".?!…" else ".")
+
+
 def _sentence(text: str, end: str) -> str:
     """A part of the question as a sentence: trimmed, ending with a full stop or question mark."""
     text = " ".join((text or "").split())
@@ -771,9 +776,9 @@ class Session:
         if it.sources:
             sides = "; ".join((f'you typed "{_short(src["value"])}"' if src.get("person")
                                else f'{src["document"]} says "{_short(src["value"])}"') for src in it.sources)
-            return f"The documents disagree: {sides}."
+            return f"The documents disagree: {sides}" + ("" if sides.endswith(('."', '?"', '!"', '…"')) else ".")
         if it.document and it.passage_found and it.passage:
-            return f'{it.document} says "{_short(it.passage)}".'
+            return _quoted(f"{it.document} says", _short(it.passage))
         if it.document:
             return f"{it.document} does not say it outright."
         return "Nothing in the folder says it."

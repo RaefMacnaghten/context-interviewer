@@ -36,7 +36,7 @@ def test_every_question_is_full_sentences_with_why_and_what_to_answer(tmp_path):
         assert ask and rest.strip(), text  # a question, then more
         assert text.endswith("."), text
         why = s.why_asked(it)
-        assert why in text and why.endswith(".")
+        assert why in text and why.rstrip("\"").endswith((".", "?", "!", "…"))
         assert any(w in text for w in ("Answer yes", "Pick one", "Answer in a few words")), text
     assert kinds == {"confirm", "choose", "open"}
 
@@ -130,3 +130,13 @@ def test_the_wording_prompt_borrows_nothing_from_the_test_tasks():
         assert name not in WORDING_SYSTEM, name
     for word in ("hall", "rota", "raffle", "pints", "inbox"):
         assert word not in WORDING_SYSTEM.lower(), word
+
+
+def test_a_quotation_that_ends_a_sentence_gets_no_second_full_stop(tmp_path):
+    # seen in the click-through: 'hall-email.txt says "The caretaker will send ... nearer the time.".'
+    s = run(copy_rota(tmp_path), tmp_path)
+    it = next(i for i in s.items if i.document and i.passage_found and not i.sources)
+    it.passage = "The caretaker will send the alarm code for locking up nearer the time."
+    assert s.why_asked(it) == f'{it.document} says "The caretaker will send the alarm code for locking up nearer the time."'
+    it.passage = "Kit Inventa,kit.inventa@example.org,any,ask me,"
+    assert s.why_asked(it).endswith('ask me,".')
