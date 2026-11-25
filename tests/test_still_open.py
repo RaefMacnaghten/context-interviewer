@@ -150,3 +150,22 @@ def test_heading_links_match_markdown_viewers():
     assert anchor("What the agent may do") == "what-the-agent-may-do"
     assert anchor("Goal and deliverable") == "goal-and-deliverable"
     assert anchor("How we know it is done") == "how-we-know-it-is-done"
+
+
+# ---------------------------------------------------------------- shown once on every screen
+
+
+def test_the_page_builds_the_block_in_one_place_only():
+    # the end screen used to build its own copy beside the brief in progress, so the block showed twice
+    js = (Path(__file__).resolve().parent.parent / "elicitagent" / "web" / "app.js").read_text(encoding="utf-8")
+    calls = re.findall(r"(?<!function )stillOpenBlock\(\)", js)
+    assert len(calls) == 1
+    render_items = js.split("function renderItems()", 1)[1].split("\nfunction ", 1)[0]
+    assert "stillOpenBlock()" in render_items
+    end_screen = js.split("function renderEndScreen(", 1)[1].split("\nfunction ", 1)[0]
+    assert "stillOpenBlock" not in end_screen
+
+
+def test_the_written_brief_has_one_still_open_section(tmp_path):
+    text = make(tmp_path).finish().read_text()
+    assert text.count("## Still open\n") == 1

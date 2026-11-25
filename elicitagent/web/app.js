@@ -520,8 +520,8 @@ function renderEndScreen(pane) {
   pane.append(
     el("div", { class: "ph" }, el("span", { class: "glyph", "aria-hidden": "true" }, "◉"), "Review before the brief is written"),
     el("div", { class: "pb" }, ...[
-      stillOpenBlock(),
-      el("p", {}, `No more questions. Asked ${view.question_count}. Check the brief on the right once: confirm, edit or reject anything. Then write it.`),
+      // the "Still open" block is shown once, at the top of the brief in progress beside this screen
+      el("p", {}, `No more questions. Asked ${view.question_count}. Check the brief in progress once: confirm, edit or reject anything. Then write it.`),
       section("Waiting", "Not settled. Answer any you can here; the brief passes the rest to the agent as \"ask before you do this\".", waiting, null, reviewAnswer),
       section("Guessed and marked", "The tool guessed these. Confirm or edit any you can.", assumed, "assumed"),
       section("Not available here", "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, "not available here", (it) => {
@@ -648,7 +648,8 @@ function renderQuestion() {
   }
 }
 
-// Display only: the "Still open" block at the top of the brief in progress and of the end screen. Each line links to
+// Display only: the "Still open" block at the top of the brief in progress, on the main screen and beside the end
+// screen; it is built in one place only, so it shows once. Each line links to
 // the item's row under its heading. It is rebuilt on every render, so it changes as items are settled.
 function goToItem(id) {
   const row = document.getElementById(`item-${id}`);

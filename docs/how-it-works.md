@@ -46,7 +46,7 @@ Each part is labelled exactly as it is: **implemented** (built and run), **simul
 - **The question and the brief in progress.** Left: the question, its kind and cost, its one line of reason, its source passage, the replies, and "Why this question?". A clash shows its two values side by side with where each came from. Right: a "Still open" block at the top, listing every item not yet settled (open, waiting, conflict, not available here), each linking to its row; then every item as a card with its state, its tags (stated or inferred, must hold or nice if possible, how it was handled, its document) and confirm, edit and reject. Inside each heading, unsettled items come first, then assumed, then confirmed.
 - **Why this question.** A read-only panel under the question with the model's estimate, the two checks, the harm, the cost, the rule's arithmetic and the reason.
 - **The question limit.** How many questions have been asked against the limit, how many more questions the tool still wants as a lower bound, "Continue" and "Stop here", and what stopping does.
-- **Review and the brief.** The end screen starts with the same "Still open" block, then lists what is waiting, what was guessed and marked, and what is not available here, then "Write the brief". The written brief replaces the items on the right, with downloads for the brief and the gap trace.
+- **Review and the brief.** The end screen lists what is waiting, what was guessed and marked, and what is not available here, then "Write the brief"; the "Still open" block stays at the top of the brief in progress beside it, shown once. The written brief replaces the items on the right, with downloads for the brief and the gap trace.
 
 ## The ask table
 
