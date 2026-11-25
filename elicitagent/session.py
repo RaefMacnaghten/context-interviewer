@@ -836,8 +836,19 @@ class Session:
 
     # ------------------------------------------------------------ view
 
+    @staticmethod
+    def way_tag(it: Item) -> str | None:
+        """The "how it was settled" tag beside the status. None when it would only repeat the status: an item the
+        person could not answer has the status "not available here" and the way "not available here"."""
+        if it.answered_on_review:
+            return "answered on review"
+        if not it.way or it.way == it.state:
+            return None
+        return it.way
+
     def item_view(self, it: Item) -> dict:
         d = asdict(it)
+        d["way_tag"] = self.way_tag(it)
         d["stated_or_inferred"] = it.stated_or_inferred
         d["must_hold_or_nice"] = it.must_hold_or_nice
         doc = self.folder.get(it.document) if (self.folder and it.document) else None

@@ -720,8 +720,7 @@ function renderItems() {
       const tags = [
         el("span", { class: `tag ${said ? "you" : it.stated_or_inferred}` }, said ? "your intent" : it.stated_or_inferred),
         el("span", { class: `tag ${it.must_hold_or_nice === "must hold" ? "must" : "nice"}` }, shown(it.must_hold_or_nice)),
-        it.answered_on_review ? el("span", { class: "tag way" }, "answered on review")
-          : it.way ? el("span", { class: "tag way" }, it.way) : null,
+        it.way_tag ? el("span", { class: "tag way" }, it.way_tag) : null,
         it.document ? el("span", { class: "src" }, it.document) : null,
         it.source === "person" && !said ? el("span", { class: "src you" }, "settled by you") : null,
         it.id === currentId ? el("span", { class: "now-tag" }, "this question") : null,

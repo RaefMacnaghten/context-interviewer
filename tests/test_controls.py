@@ -99,3 +99,17 @@ def test_source_context_is_given_for_items_and_clash_sources(s):
     assert item["context"] and item["context"]["match"]
     clash = next(i for i in v["items"] if i["sources"])
     assert all(src["context"] for src in clash["sources"])
+
+
+def test_an_item_nobody_here_can_answer_shows_its_status_once(tmp_path):
+    # seen by the author: on a "not available here" item the same words appeared as the status and as the
+    # how-it-was-settled tag
+    s = Session(ROTA, "", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, limit=None).start()
+    q = s.current_question()
+    s.reply(q.id, "I can't answer this", who="the caretaker")
+    view = next(v for v in s.view()["items"] if v["id"] == q.id)
+    assert view["state"] == "not available here" and view["way_tag"] is None
+    other = next(v for v in s.view()["items"] if v["way"] == "read a file (first look)")
+    assert other["way_tag"] == "read a file (first look)"
+    js = (Path(__file__).resolve().parent.parent / "elicitagent" / "web" / "app.js").read_text()
+    assert "it.way_tag ?" in js and 'class: "tag way" }, it.way)' not in js
