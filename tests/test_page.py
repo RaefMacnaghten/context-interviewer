@@ -59,3 +59,29 @@ def test_the_question_card_has_a_back_button():
     revisit = _function(js, "renderRevisit")
     assert "revise(a, " in revisit and "does not count as a new question" in revisit
     assert "/revise`" in _function(js, "revise")
+
+
+def test_completed_stages_can_be_looked_back_at():
+    # the author's request of 25 Nov 2026: click through the stages already completed, then back
+    js = APP.read_text(encoding="utf-8")
+    steps = _function(js, "renderSteps")
+    assert 'el("button"' in steps and "stageView = i === at ? null : n" in steps
+    stage = _function(js, "renderStageView")
+    for name in ('"Folder"', '"Reading"', '"Interview"', '"Review"'):
+        assert name in stage
+    assert "Read-only" in stage and "renderEndScreen(body, true)" in stage
+    end = _function(js, "renderEndScreen")
+    assert 'readOnly ? null : el("button", { class: "b pr big", onclick: finish }' in end
+
+
+def test_the_session_view_keeps_what_the_start_page_said(tmp_path):
+    from elicitagent.models import SimulatedModel
+    from elicitagent.session import Session
+
+    rota = APP.parent.parent.parent / "tasks" / "rota" / "materials"
+    s = Session(rota, "x", SimulatedModel.for_folder(rota), runs_dir=tmp_path, limit=3).start()
+    while (q := s.current_question()) is not None:
+        s.reply(q.id, "skip")
+    s.limit_choice("continue")
+    v = s.view()
+    assert v["folder"] == "tasks/rota/materials" and v["limit_at_start"] == 3 and v["limit"] == 11

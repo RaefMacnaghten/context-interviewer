@@ -50,11 +50,17 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-offs
 .bar2 i.hot { background: var(--warn); }
 
 .steps { display: flex; flex-wrap: wrap; gap: 4px; padding: 8px 20px; background: var(--surface-2); border-bottom: 1px solid var(--line); font-size: 12.5px; }
-.steps span { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; color: var(--faint); white-space: nowrap; }
-.steps span b { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid currentColor; font-size: 10px; }
-.steps span.done { color: var(--ok-text); }
-.steps span.done b { background: var(--ok); border-color: var(--ok); color: var(--surface); }
-.steps span.on { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.steps > span, .steps > button { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; color: var(--faint); white-space: nowrap; }
+.steps > button { font: inherit; background: none; border: 1.5px solid transparent; cursor: pointer; }
+.steps > button:hover { border-color: var(--line-2); }
+.steps > button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.steps b { display: inline-grid; place-items: center; width: 17px; height: 17px; border-radius: 50%; border: 1.5px solid currentColor; font-size: 10px; }
+.steps .done { color: var(--ok-text); }
+.steps .done b { background: var(--ok); border-color: var(--ok); color: var(--surface); }
+.steps .on { background: var(--accent); color: var(--accent-ink); font-weight: 700; }
+.steps .looking { border-color: var(--ok); background: var(--ok-soft); }
+.asked-list { margin: 0; padding-left: 20px; display: grid; gap: 8px; font-size: 13px; }
+.asked-q { font-weight: 600; }
 
 main { padding: 18px 20px 48px; }
 

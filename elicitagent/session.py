@@ -236,6 +236,7 @@ class Session:
         # Plan change 2: the limit is a number of questions and starts at the ask table's value. None switches it
         # off. Question cost is still counted, for the rule, the gap trace and the "why this question" panel.
         self.limit = self.table.limit_start if limit == "default" else (_whole(limit) if limit is not None else None)
+        self.limit_at_start = self.limit  # what the start page asked for; the limit grows if the person continues
         self._limit_logged_at: int | None = None
         self.stopped = False
         self.finished = False
@@ -965,6 +966,8 @@ class Session:
             "progress": self.progress_view(),
             "task": self.task,
             "intent": self.intent,
+            "folder": str(self.folder_path.relative_to(REPO_ROOT)) if self.folder_path.is_relative_to(REPO_ROOT) else str(self.folder_path),
+            "limit_at_start": self.limit_at_start,
             "run": self.run,
             "rule": self.rule,
             "rule_label": self.table.rule_label(self.rule),

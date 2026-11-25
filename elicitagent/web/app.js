@@ -53,12 +53,60 @@ function stateChip(state, text) {
   return el("span", { class: `chip st-${stateClass(state)}` }, el("span", { class: "glyph", "aria-hidden": "true" }, STATE_GLYPH[state] || "·"), label);
 }
 
-// The step bar under the top bar: Folder, Reading, Interview, Review, Brief.
+// The step bar under the top bar: Folder, Reading, Interview, Review, Brief. Once a session is under way, each
+// completed stage is a button: it shows that stage read-only, and the current stage's button returns to it.
+let stageView = null; // the earlier stage being looked at, or null for the current one
 function renderSteps(on) {
   const names = ["Folder", "Reading", "Interview", "Review", "Brief"];
   const at = names.indexOf(on);
-  $("#steps").replaceChildren(...names.map((n, i) => el("span", { class: i < at ? "done" : i === at ? "on" : "", "aria-current": i === at ? "step" : null },
-    el("b", { "aria-hidden": "true" }, i < at ? "✓" : String(i + 1)), n)));
+  const live = Boolean(view && view.status === "ready");
+  const looking = live && stageView !== null && stageView !== on ? names.indexOf(stageView) : -1;
+  $("#steps").replaceChildren(...names.map((n, i) => {
+    const cls = [i < at ? "done" : i === at ? "on" : "", i === looking ? "looking" : ""].join(" ").trim();
+    const inner = [el("b", { "aria-hidden": "true" }, i < at ? "✓" : String(i + 1)), n];
+    if (live && i <= at) {
+      return el("button", { type: "button", class: cls, "aria-current": i === at ? "step" : null, "aria-pressed": i === looking ? "true" : null,
+        title: i === at ? "The stage you are at" : `Look back at the ${n.toLowerCase()} stage (read-only)`,
+        onclick: () => { stageView = i === at ? null : n; render(); } }, ...inner);
+    }
+    return el("span", { class: cls, "aria-current": i === at ? "step" : null }, ...inner);
+  }));
+}
+
+function currentStage() {
+  if (!view || view.status !== "ready") return view && view.status ? "Reading" : "Folder";
+  return view.finished ? "Brief" : (!view.question && !view.at_limit) ? "Review" : "Interview";
+}
+
+// An earlier stage, read-only, in place of the question card. Nothing changes; the brief in progress stays beside it.
+function renderStageView(pane, stage) {
+  pane.className = "panel q-pane stage-view";
+  const back = el("button", { class: "b pr", onclick: () => { stageView = null; render(); } }, `Back to the ${currentStage().toLowerCase()} stage`);
+  const head = el("div", { class: "ph" }, el("span", {}, `${stage}: looking back`), el("span", { class: "sp" }), el("span", { class: "ro" }, "Read-only"));
+  const body = el("div", { class: "pb" });
+  if (stage === "Folder") {
+    const limit = view.limit_at_start === null ? "No limit" : `${view.limit_at_start} ${view.limit_at_start === 1 ? "question" : "questions"}`;
+    body.append(el("dl", { class: "kv" }, [
+      ["What you want the agent to do", view.intent || "(left empty: the goal comes from the folder)"],
+      ["Folder", view.folder], ["Rule", view.rule_label + (view.threshold !== null ? `, ${view.threshold}` : "")],
+      ["Question limit", limit], ["Model", view.model_kind === "simulated" ? "Simulated" : view.model],
+      ["Read", view.documents.join(", ") || "nothing"],
+      ["Skipped", view.skipped.length ? view.skipped.map((x) => `${x.name} (${x.reason})`).join("; ") : "nothing"],
+    ].flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)])));
+  } else if (stage === "Reading") {
+    const steps = el("ol", { class: "read-steps" }, view.progress.steps.map((st) => el("li", { class: `read-step ${st.state}` },
+      el("span", { class: "read-mark", "aria-hidden": "true" }, st.state === "done" ? "✓" : ""),
+      el("div", { class: "read-body" }, el("div", { class: "read-label" }, el("span", {}, st.label),
+        st.summary ? el("span", { class: "read-count" }, `${st.summary}${st.seconds !== null ? ` · ${Math.floor(st.seconds)} s` : ""}`) : null)))));
+    body.append(steps);
+  } else if (stage === "Interview") {
+    body.append(view.asked.length ? el("ol", { class: "asked-list" }, view.asked.map((a) => el("li", {},
+      el("div", { class: "asked-q" }, a.text), el("div", { class: "small" }, replyWords(a)))))
+      : el("p", { class: "small" }, "No question was asked."));
+  } else if (stage === "Review") {
+    renderEndScreen(body, true);
+  }
+  pane.append(head, body, el("div", { class: "pb brow" }, back));
 }
 
 function stateClass(state) {
@@ -500,7 +548,7 @@ function render() {
     renderBrief();
     return;
   }
-  renderSteps(view.finished ? "Brief" : (!view.question && !view.at_limit) ? "Review" : "Interview");
+  renderSteps(currentStage());
   $("#progress-pane").hidden = false;
   renderQuestion();
   renderProgress();
@@ -538,7 +586,7 @@ async function limitChoice(action) {
 }
 
 // P10: one end screen. Review everything once, see what waits, then write the brief.
-function renderEndScreen(pane) {
+function renderEndScreen(pane, readOnly = false) {
   const live = view.items.filter((i) => !i.rejected);
   const waiting = live.filter((i) => i.state === "open" || i.state === "conflict");
   const assumed = live.filter((i) => i.state === "assumed");
@@ -551,20 +599,20 @@ function renderEndScreen(pane) {
       it.value && it.state === "assumed" ? el("span", { class: "muted" }, `: ${it.value}`) : null,
       it.state === "open" || it.state === "conflict" ? el("span", { class: `tag ${it.must_hold_or_nice === "must hold" ? "must" : "nice"} rv-tag` }, shown(it.must_hold_or_nice)) : null,
       extra ? extra(it) : null)))) : null;
-  pane.className = "panel q-pane";
+  if (!readOnly) pane.className = "panel q-pane";
   pane.append(
-    el("div", { class: "ph" }, el("span", { class: "glyph", "aria-hidden": "true" }, "◉"), "Review before the brief is written"),
+    readOnly ? null : el("div", { class: "ph" }, el("span", { class: "glyph", "aria-hidden": "true" }, "◉"), "Review before the brief is written"),
     el("div", { class: "pb" }, ...[
       // the "Still open" block is shown once, at the top of the brief in progress beside this screen
       el("p", {}, `No more questions. Asked ${view.question_count}. Check the brief in progress once: confirm, edit or reject anything. Then write it.`),
-      section("Waiting", "Not settled. Answer any you can here; the brief passes the rest to the agent as \"ask before you do this\".", waiting, null, reviewAnswer),
+      section("Waiting", "Not settled. Answer any you can here; the brief passes the rest to the agent as \"ask before you do this\".", waiting, null, readOnly ? null : reviewAnswer),
       section("Guessed and marked", "The tool guessed these. Confirm or edit any you can.", assumed, "assumed"),
-      section(shown("not available here"), "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, "not available here", (it) => {
+      section(shown("not available here"), "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, "not available here", readOnly ? (it) => (it.who_could ? el("span", { class: "muted" }, ` · ${it.who_could}`) : null) : (it) => {
         const box = el("input", { type: "text", value: it.who_could || "", placeholder: "Who could?", "aria-label": `Who could answer: ${it.label}` });
         box.addEventListener("change", () => control(it.id, "who could", box.value));
         return box;
       }),
-      el("button", { class: "b pr big", onclick: finish }, "Write the brief"),
+      readOnly ? null : el("button", { class: "b pr big", onclick: finish }, "Write the brief"),
     ].filter(Boolean)),
   );
 }
@@ -607,6 +655,11 @@ function renderQuestion() {
   document.querySelectorAll("aside.left > .why").forEach((n) => n.remove());
   pane.replaceChildren();
   pane.className = "panel q-pane";
+  if (stageView !== null && stageView !== currentStage()) {
+    renderStageView(pane, stageView);
+    return;
+  }
+  stageView = null;
   if (view.finished) {
     pane.append(
       el("div", { class: "ph" }, el("span", { class: "glyph ok", "aria-hidden": "true" }, "✓"), "The brief is written"),
