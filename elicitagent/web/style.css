@@ -179,13 +179,15 @@ label.ph { display: block; cursor: text; }
 .q-detail { font-size: 14px; line-height: 1.5; margin: -2px 0 10px; color: var(--text); }
 .q-detail .q-form { font-weight: 650; }
 .reply-now { font-size: 13px; font-weight: 650; margin: 6px 0 10px; }
-.opt.chosen { border-color: var(--accent); }
+
 .qq { font-size: 17px; font-weight: 750; line-height: 1.3; letter-spacing: -.01em; margin: 0 0 8px; }
 .q-why { font-size: 12.5px; color: var(--accent-text); background: var(--accent-soft); border-radius: 8px; padding: 8px 10px; margin: 0 0 12px; }
 .opts { display: grid; gap: 6px; margin: 10px 0; }
 .opt { display: flex; align-items: center; gap: 9px; width: 100%; text-align: left; font: inherit; font-size: 13.5px; color: var(--text); border: 1px solid var(--line-2); border-radius: 9px; padding: 9px 11px; background: var(--surface); cursor: pointer; }
 .opt:hover, .opt.pick { border-color: var(--accent); background: var(--accent-soft); }
+.opt.chosen { border-color: var(--accent); background: var(--accent-soft); }
 .opt .rd { width: 15px; height: 15px; border-radius: 50%; border: 1.5px solid var(--line-2); flex: none; }
+.opt.chosen .rd { border: 4.5px solid var(--accent); }
 .opt.pick .rd { border: 4.5px solid var(--accent); }
 .typed { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px; margin: 10px 0 0; }
 .replies { margin: 8px 0 0; }

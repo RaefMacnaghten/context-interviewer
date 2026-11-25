@@ -790,7 +790,7 @@ function renderRevisit(pane, a) {
   const opts = el("div", { class: "opts" });
   const picked = (v) => a.reply === "answer" && a.value === v;
   if (a.kind === "confirm" && a.confirm_value) {
-    opts.append(el("button", { class: `opt pick ${picked(a.confirm_value) ? "chosen" : ""}`, onclick: () => revise(a, "answer", a.confirm_value) },
+    opts.append(el("button", { class: `opt ${picked(a.confirm_value) ? "chosen" : ""}`, onclick: () => revise(a, "answer", a.confirm_value) },
       el("span", { class: "rd", "aria-hidden": "true" }), el("span", {}, "Yes, that is right")));
   }
   const choices = a.kind === "choose" ? (a.sources && a.sources.length ? a.sources.map((src) => src.value) : a.candidates) : [];
