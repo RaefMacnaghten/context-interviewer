@@ -28,15 +28,16 @@ def test_both_sheets_parse_and_say_draft():
         assert len(parsed) >= 20
         assert any(r.where == "nowhere" for r in parsed)
         assert all(r.heading for r in parsed)
-        # every row's place is read as a document, the person's head or nowhere
-        assert all(r.where.startswith("file: ") or r.where in ("head", "nowhere") for r in parsed)
+        # every row's place is read as a document, the person's head, nowhere or a clash
+        assert all(r.where.startswith("file: ") or r.where in ("head", "nowhere", "clash") for r in parsed)
 
 
 def test_the_written_layout_is_read():
     r = {row.id: row for row in rows()}
     assert len(r) == 70
     assert r["R23"].where == "file: event-plan.md"  # "event-plan.md: `Setup starts at 12:00. ...`"
-    assert r["R27"].where == "file: event-plan.md"  # "Clash between event-plan.md: ... and hall-email.txt: ..."
+    assert r["R27"].where == "clash"  # "Clash between event-plan.md: ... and hall-email.txt: ..."
+    assert r["R27"].key_answer == "22:00" and r["R27"].explained  # "22:00. Pack down is 20:30 to 22:00 and ..."
     assert r["R16"].where == "head"  # "Only in the person's head (invented by the drafter). ..."
     assert (r["R68"].where, r["R68"].who) == ("nowhere", "the hall caretaker")
     assert r["R12"].form == "yes or no" and r["R12"].key_answer == "no"  # "No. Fenn Mockridge is 16 ..."
@@ -59,10 +60,14 @@ def test_person_replies_from_the_sheet():
     kit = item("When Kit is available", heading="People")
     assert person_reply(kit, match_row(kit, r)) == ("answer", "From 16:00 until the end of pack down at 22:00", None)
     assert person_reply(item("Something left out of the sheet"), None) == ("skip", None, None)
+    # a clash: the script picks the short side the sheet's answer starts with, not the whole explanation
+    pack = item("Clash: when pack down ends", kind="choose", candidates=["22:30", "22:00"])
+    assert person_reply(pack, match_row(pack, r)) == ("answer", "22:00", None)
 
 
 def test_same_answer_is_not_fooled_by_part_of_the_answer():
     assert same_answer("22:00", "22:00")
+    assert not same_answer("120", "12") and same_answer("12 volunteers", "12")
     assert not same_answer("Ada Testwell", "Ada Testwell and Dev Placeholder")
     assert same_answer("No, draft it first", "no")
     assert not same_answer("yes", "no")
@@ -72,6 +77,8 @@ def test_marking():
     r = rows()
     t = item("Setup start time", value="12:00 to 14:00")
     assert mark(t, match_row(t, r)) == "correct"
+    t.value = "12:00"  # part of "12:00 to 14:00": a person judges
+    assert mark(t, match_row(t, r)) == "to mark by hand"
     t.value = "13:00"
     assert mark(t, match_row(t, r)) == "wrong"
     t.state = "open"
@@ -80,6 +87,12 @@ def test_marking():
     assert mark(fenn, match_row(fenn, r)) == "correct"  # a yes-or-no row is marked on its first word
     fenn.value = "Fenn does door only"
     assert mark(fenn, match_row(fenn, r)) == "to mark by hand"  # a descriptive value against a yes-or-no row
+    keys = item("Earliest anyone can get into the hall", value="11:30")
+    assert mark(keys, match_row(keys, r)) == "to mark by hand"  # the sheet explains after "11:30, when the keys ..."
+    pack = item("Clash: when pack down ends", value="22:00")
+    assert mark(pack, match_row(pack, r)) == "correct"
+    pack.value = "22:30"
+    assert mark(pack, match_row(pack, r)) == "to mark by hand"  # explained answer: never marked wrong by script
     how = item("How the licence rule is met in practice", heading="Rules", value="Basil all day")
     assert mark(how, match_row(how, r)) == "to mark by hand"  # free text
 
@@ -97,3 +110,6 @@ def test_waste_is_a_question_the_folder_could_have_answered():
     not_asked = item("Setup start time", value="12:00")
     assert is_waste(not_asked, match_row(not_asked, r)) is False
     assert is_waste(asked_file, None) is None
+    clash = item("Clash: when pack down ends")
+    clash.asked = True
+    assert is_waste(clash, match_row(clash, r)) is False  # the tool always asks a clash

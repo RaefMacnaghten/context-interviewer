@@ -50,7 +50,19 @@ class SheetRow:
             first = re.match(r"\s*(yes|no)\b", self.answer, re.IGNORECASE)
             if first:
                 return first.group(1).lower()
-        return self.answer.strip().rstrip(".").strip()
+        return _first_sentence(self.answer)
+
+    @property
+    def explained(self) -> bool:
+        """Whether the right answer says more after its first sentence (a reason, an example, a caution)."""
+        return _first_sentence(self.answer) != self.answer.strip().rstrip(".").strip()
+
+
+def _first_sentence(text: str) -> str:
+    """Up to the first full stop that ends a sentence (not one inside a number such as 64.20)."""
+    text = text.strip()
+    m = re.search(r"\.(?=\s|$)", text)
+    return (text[: m.start()] if m else text).strip()
 
 
 COLUMNS = {
@@ -58,7 +70,7 @@ COLUMNS = {
     "question tier": "tier", "must hold or nice if possible": "priority", "where the answer lives": "where",
     "who could supply it": "who",
 }
-DOCUMENT = re.compile(r"([A-Za-z0-9_.\-]+\.(?:md|txt|csv|pdf|json|py))")
+DOCUMENT = re.compile(r"([A-Za-z0-9_.\-]+\.(?:md|txt|csv|tsv|pdf|json|py|xlsx|xls|docx|doc))")
 
 
 def _place(cell: str) -> tuple[str, str]:
@@ -75,6 +87,8 @@ def _place(cell: str) -> tuple[str, str]:
         return "head", ""
     if low.startswith("file:"):
         return "file: " + text[5:].strip(), ""
+    if low.startswith("clash"):  # settled by the person choosing between two passages; always asked by the tool
+        return "clash", ""
     doc = DOCUMENT.search(text)
     return ("file: " + doc.group(1), "") if doc else (text, "")
 
@@ -149,8 +163,8 @@ def same_answer(given: str | None, right: str) -> bool:
     gw = set(g.split())
     if r in ("yes", "no"):
         return (r == "yes" and bool(gw & yes) and not gw & no) or (r == "no" and bool(gw & no) and not gw & yes)
-    # the given value may say more than the right answer, but must contain all of it
-    return r in g
+    # the given value may say more than the right answer, but must contain all of it, as whole words
+    return re.search(r"(?<![a-z0-9:])" + re.escape(r) + r"(?![a-z0-9:])", g) is not None
 
 
 def person_reply(it: Item, row: SheetRow | None) -> tuple[str, str | None, str | None]:
@@ -162,7 +176,11 @@ def person_reply(it: Item, row: SheetRow | None) -> tuple[str, str | None, str |
         for c in it.candidates:
             if same_answer(c, row.key_answer):
                 return ("answer", c, None)
-    return ("answer", row.key_answer, None)
+        for c in it.candidates:  # a short candidate that the sheet's answer begins with or contains: "22:00"
+            if row.form != "yes or no" and same_answer(row.key_answer, c):
+                return ("answer", c, None)
+    # what the person says: the sheet's answer, in full for free text, its first sentence otherwise
+    return ("answer", row.answer.strip() if row.form == "free text" else row.key_answer, None)
 
 
 def mark(it: Item, row: SheetRow | None) -> str:
@@ -179,7 +197,13 @@ def mark(it: Item, row: SheetRow | None) -> str:
         return "to mark by hand"
     if form == "yes or no" and not ({"yes", "no", "y", "n", "true", "false"} & set(_norm(it.value).split())):
         return "to mark by hand"  # a descriptive value against a yes-or-no row needs a person to judge
-    return "correct" if same_answer(it.value, row.key_answer) else "wrong"
+    if same_answer(it.value, row.key_answer):
+        return "correct"
+    if form == "exact" and (row.explained or same_answer(row.key_answer, it.value)):
+        # the sheet explains its answer, or the value is part of it ("12:00" against "12:00 to 14:00"):
+        # a person judges whether the value says enough
+        return "to mark by hand"
+    return "wrong"
 
 
 def is_waste(it: Item, row: SheetRow | None) -> bool | None:
