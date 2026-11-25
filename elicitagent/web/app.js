@@ -613,9 +613,9 @@ function renderEndScreen(pane, readOnly = false) {
       readOnly
         ? el("p", {}, `Asked ${view.question_count}. What is still waiting, guessed or for someone else${view.finished ? ", as the brief now stands" : ""}.`)
         : el("p", {}, `No more questions. Asked ${view.question_count}. Check the brief in progress once: confirm, edit or reject anything. Then write it.`),
-      section("Waiting", "Not settled. Answer any you can here; the brief passes the rest to the agent as \"ask before you do this\".", waiting, null, readOnly ? null : reviewAnswer),
-      section("Guessed and marked", "The tool guessed these. Confirm or edit any you can.", assumed, "assumed"),
-      section(shown("not available here"), "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, "not available here", readOnly ? (it) => (it.who_could ? el("span", { class: "muted" }, ` · ${it.who_could}`) : null) : (it) => {
+      section("Waiting", readOnly ? "Not settled: the brief passes these to the agent as \"ask before you do this\"." : "Not settled. Answer any you can here; the brief passes the rest to the agent as \"ask before you do this\".", waiting, null, readOnly ? null : reviewAnswer),
+      section("Guessed and marked", readOnly ? "The tool guessed these." : "The tool guessed these. Confirm or edit any you can.", assumed, "assumed"),
+      section(shown("not available here"), readOnly ? "You could not answer these, and the folder does not hold them." : "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, "not available here", readOnly ? (it) => (it.who_could ? el("span", { class: "muted" }, ` · ${it.who_could}`) : null) : (it) => {
         const box = el("input", { type: "text", value: it.who_could || "", placeholder: "Who could?", "aria-label": `Who could answer: ${it.label}` });
         box.addEventListener("change", () => control(it.id, "who could", box.value));
         return box;

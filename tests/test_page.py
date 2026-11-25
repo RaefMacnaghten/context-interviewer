@@ -112,3 +112,4 @@ def test_the_review_stage_looked_back_at_shows_no_stray_text():
     end = _function(APP.read_text(encoding="utf-8"), "renderEndScreen")
     assert "pane.append(...[" in end and "].filter(Boolean));" in end
     assert "as the brief now stands" in end
+    assert 'readOnly ? "Not settled: the brief passes these' in end  # no "answer any you can here" when looking back
