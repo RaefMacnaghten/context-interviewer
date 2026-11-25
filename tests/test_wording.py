@@ -115,3 +115,18 @@ def test_the_page_gets_the_three_parts_to_set_out(tmp_path):
     q = s.view()["question"]
     assert set(q["parts"]) == {"ask", "why", "form"} and q["parts"]["ask"].endswith("?")
     assert q["text"] == " ".join(p for p in (q["parts"]["ask"], q["parts"]["why"], q["parts"]["form"]) if p)
+
+
+def test_the_wording_prompt_borrows_nothing_from_the_test_tasks():
+    # the examples in the prompt must not be the test tasks' own questions: the first version used the rota's
+    # "When can Kit Inventa work on the day?", and the model gave exactly that back on a rota run
+    import csv
+
+    from elicitagent.models import WORDING_SYSTEM
+
+    rows = list(csv.DictReader((ROTA / "materials" / "volunteers.csv").open(encoding="utf-8")))
+    names = {w for r in rows for w in next(iter(r.values())).split() if len(w) > 2}
+    for name in names:
+        assert name not in WORDING_SYSTEM, name
+    for word in ("hall", "rota", "raffle", "pints", "inbox"):
+        assert word not in WORDING_SYSTEM.lower(), word

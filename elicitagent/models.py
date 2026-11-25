@@ -305,8 +305,8 @@ ESTIMATE_SCHEMA = {
 WORDING_SYSTEM = """You write the questions a person is asked about a task they are handing to an AI agent. Everything has already been decided: these items will be asked. Your only job is the wording.
 
 For each item write:
-- question: one full, plain sentence ending with a question mark that says exactly what is needed, naming the person, thing or date it is about. Ask about the real-world fact, not about a label: "When can Kit Inventa work on the day?", not "Kit Inventa's availability?". For a confirm item, ask whether the given value is right ("Is the hall free from 11:00?"). For a choose item, ask which of the given values is right, without listing them. For an open item, ask for the value.
-- answer_form: one short sentence saying what form of answer is wanted, such as "Give times, or \"all day\"." or "Give a number of pints a day." or "Answer yes or no."
+- question: one full, plain sentence ending with a question mark that says exactly what is needed, naming the person, thing or date it is about. Ask about the real-world fact, not about a label: "Which days can Jo Sample drive the van?", not "Jo Sample's driving?". For a confirm item, ask whether the given value is right ("Does the shop open at 9:00?"). For a choose item, ask which of the given values is right, without listing them. For an open item, ask for the value.
+- answer_form: one short sentence saying what form of answer is wanted, such as "Give the days, or \"any day\"." or "Give a number of boxes." or "Answer yes or no."
 
 Do not say why the question is asked: that is added separately from the files. Do not add facts that are not in the item or the folder. Use plain words and the names as they appear. Return one entry per item id."""
 
