@@ -6,10 +6,16 @@ from __future__ import annotations
 import argparse
 import sys
 
+from .models import EXPERIMENTS
+
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="elicitagent", description=__doc__)
     sub = parser.add_subparsers(dest="command", required=True)
+
+    def experiment_option(p):
+        p.add_argument("--experiment", action="append", default=[], choices=sorted(EXPERIMENTS),
+                       help="switch on an experimental change (off by default; not adopted; real model only)")
 
     p_serve = sub.add_parser("serve", help="start the local web page")
     p_serve.add_argument("--port", type=int, default=8765)
@@ -25,12 +31,14 @@ def main(argv: list[str] | None = None) -> int:
     p_dry.add_argument("--runs-dir", default=None)
     p_dry.add_argument("--limit", type=int, default=None,
                        help="a question limit; the script stops when it is reached (default: no limit, as in the test)")
+    experiment_option(p_dry)
 
     p_freeze = sub.add_parser("freeze", help="read the folder once on the model and save the item list for replay")
     p_freeze.add_argument("task", help="a task folder holding materials/ and intent.txt")
     p_freeze.add_argument("--out", required=True, help="where to save the frozen first look (JSON)")
     p_freeze.add_argument("--model", choices=["auto", "simulated", "anthropic"], default="auto")
     p_freeze.add_argument("--runs-dir", default=None, help="where the session's own trace goes (default: next to --out)")
+    experiment_option(p_freeze)
 
     p_replay = sub.add_parser("replay", help="try every rule setting on frozen first looks, with no model call")
     p_replay.add_argument("frozen", nargs="+", help="frozen first looks of one task")
@@ -52,14 +60,15 @@ def main(argv: list[str] | None = None) -> int:
         from .harness import dry_run
 
         return dry_run(args.task, model_choice=args.model, rule=args.rule, threshold=args.threshold,
-                       sheet=args.sheet, runs_dir=args.runs_dir, limit=args.limit)
+                       sheet=args.sheet, runs_dir=args.runs_dir, limit=args.limit, experiments=args.experiment)
     if args.command == "freeze":
         from pathlib import Path
 
         from .replay import freeze
 
         out = Path(args.out)
-        frozen = freeze(args.task, out, model_choice=args.model, runs_dir=args.runs_dir or out.parent / (out.stem + "-session"))
+        frozen = freeze(args.task, out, model_choice=args.model, runs_dir=args.runs_dir or out.parent / (out.stem + "-session"),
+                        experiments=args.experiment)
         gaps = sum(1 for d in frozen["decisions"] if d["chance_wrong"] is not None)
         print(f"Froze the first look on {frozen['task']} ({frozen['model']}): {len(frozen['decisions'])} items, "
               f"{gaps} gaps. Written to {out}")

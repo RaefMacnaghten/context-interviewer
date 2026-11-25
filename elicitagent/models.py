@@ -328,6 +328,35 @@ WORDING_SCHEMA = {
 }
 
 
+# Experiments: candidate changes to what the first look lists, each behind its own setting, OFF by default. They are
+# NOT adopted: they exist so a frozen replay can compare them with the tool as it is. With every setting off, every
+# prompt is exactly the one above.
+E1_TABLE_ROWS = "e1-table-rows"
+EXPERIMENTS = {
+    E1_TABLE_ROWS: "the first look lists each row of a table that the task acts on as its own item",
+}
+
+E1_LIST = """
+
+Tables the task acts on (an experimental setting): when the task acts on the rows of a table, such as one line per thing to order, one line per person to remind or one line per job to do, list each such row as its own item, with its own key and a label that names the row, instead of one item for the whole table. Give each row's value for this occasion as the folder gives it, with that row's document and passage."""
+
+
+def check_experiments(experiments) -> frozenset[str]:
+    names = frozenset(experiments or ())
+    unknown = names - set(EXPERIMENTS)
+    if unknown:
+        raise ModelError(f"Unknown experiment: {', '.join(sorted(unknown))}. Known: {', '.join(sorted(EXPERIMENTS))}.")
+    return names
+
+
+def list_system(experiments=frozenset()) -> str:
+    """The first look's instructions, with each experiment that is switched on added at the end."""
+    system = LIST_SYSTEM.format(headings=", ".join(f'"{h}"' for h in ALL_HEADINGS))
+    if E1_TABLE_ROWS in experiments:
+        system += E1_LIST
+    return system
+
+
 def _plain(text: str) -> str:
     return " ".join("".join(c.lower() if c.isalnum() else " " for c in text).split())
 
@@ -348,8 +377,9 @@ def _folder_as_text(folder: Folder) -> str:
 class AnthropicModel(Model):
     kind = "real"
 
-    def __init__(self, model_name: str | None = None, client=None):
+    def __init__(self, model_name: str | None = None, client=None, experiments=()):
         self.name = model_name or DEFAULT_MODEL_NAME
+        self.experiments = check_experiments(experiments)
         if client is None:
             if not os.environ.get("ANTHROPIC_API_KEY"):
                 raise ModelError("ANTHROPIC_API_KEY is not set. Set it, or run with the simulated model.")
@@ -401,7 +431,7 @@ class AnthropicModel(Model):
             raise ModelError(f"The model returned invalid JSON: {exc}") from exc
 
     def list_items(self, intent: str, folder: Folder, on_partial=None) -> list[dict]:
-        system = LIST_SYSTEM.format(headings=", ".join(f'"{h}"' for h in ALL_HEADINGS))
+        system = list_system(self.experiments)
         user = f"{_intent_block(intent)}\n\nThe folder:\n{_folder_as_text(folder)}"
         on_text = (lambda buf: on_partial(complete_objects(buf, "items"))) if on_partial else None
         return self._call(system, user, LIST_SCHEMA, on_text)["items"]
@@ -446,12 +476,16 @@ class AnthropicModel(Model):
                 for q in data["questions"] if q.get("id") in wanted and q.get("question", "").strip()}
 
 
-def make_model(choice: str, folder_path: str | Path, model_name: str | None = None) -> Model:
-    """choice: "simulated", "anthropic" or "auto" (the API when a key is set, else simulated)."""
+def make_model(choice: str, folder_path: str | Path, model_name: str | None = None, experiments=()) -> Model:
+    """choice: "simulated", "anthropic" or "auto" (the API when a key is set, else simulated). An experiment changes
+    what the real model is asked, so it cannot be switched on for the simulated model."""
+    experiments = check_experiments(experiments)
     if choice == "auto":
         choice = "anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "simulated"
     if choice == "simulated":
+        if experiments:
+            raise ModelError("Experiments change what the real model is asked; the simulated model cannot follow them.")
         return SimulatedModel.for_folder(folder_path)
     if choice == "anthropic":
-        return AnthropicModel(model_name)
+        return AnthropicModel(model_name, experiments=experiments)
     raise ModelError(f"Unknown model choice: {choice}")

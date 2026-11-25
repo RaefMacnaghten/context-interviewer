@@ -87,6 +87,10 @@ uv run elicitagent freeze practice/plant-care --model anthropic --out /path/outs
 uv run elicitagent replay /path/outside/the/repo/plant-care-*.json --sheet /path/to/plant-care-answer-sheet.md --out /path/outside/the/repo/plant-care.jsonl
 ```
 
+**Experimental settings, off by default and not adopted.** `--experiment` on `dry-run` and `freeze` switches on a candidate change to what the real model is asked in the first look, so a frozen replay can compare it with the tool as it is. They were made by an AI agent on 25 Nov 2026 as candidate answers to two design findings from the practice runs; the author decides whether any is kept. With no `--experiment`, the model is asked exactly what it was asked before (a test pins this). They cannot be used with the simulated model.
+
+- `e1-table-rows`: the first look lists each row of a table that the task acts on as its own item, instead of one item for the whole table.
+
 ## Task folders
 
 - `tasks/rota`: the volunteer rota for the monthly Larkfield Lane Folk Afternoon, framed as one occurrence of a monthly job: the intent reads "the way we do it every month", the event plan says the event runs every month, and Saturday 6 March 2027 is this month's date. The tool builds a brief for this occurrence only. This is the example that carries the report.

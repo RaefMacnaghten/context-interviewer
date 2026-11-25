@@ -124,10 +124,10 @@ def decisions(session: Session) -> list[dict]:
 
 
 def freeze(task: str | Path, out: str | Path, model_choice: str = "auto", model: Model | None = None,
-           runs_dir: str | Path | None = None) -> dict:
+           runs_dir: str | Path | None = None, experiments=()) -> dict:
     """One first look on the model, saved for replay. Returns what was saved."""
     task_dir, materials, intent = _task_parts(task)
-    inner = model or make_model(model_choice, materials)
+    inner = model or make_model(model_choice, materials, experiments=experiments)
     rec = RecordingModel(inner)
     session = Session(materials, intent, rec, runs_dir=runs_dir, limit=None).start()
     frozen = {

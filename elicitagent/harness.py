@@ -330,7 +330,8 @@ def mark_all(session: Session, rows_for: dict[str, SheetRow]) -> dict[str, dict]
 
 
 def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", threshold: float | None = None,
-            sheet: str | None = None, runs_dir: str | None = None, limit: int | None = None) -> int:
+            sheet: str | None = None, runs_dir: str | None = None, limit: int | None = None,
+            experiments=()) -> int:
     """One dry run. The question limit is off unless `limit` is given; with a limit, the script stops at it, as
     a person pressing "Stop" on the limit screen would, and then answers on the end screen as usual."""
     task_dir = Path(task).resolve()
@@ -340,7 +341,7 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
     intent = intent_file.read_text(encoding="utf-8").strip() if intent_file.is_file() else ""
     sheet_path = Path(sheet) if sheet else find_sheet(task_dir)
     rows = parse_sheet(sheet_path)
-    model = make_model(model_choice, materials)
+    model = make_model(model_choice, materials, experiments=experiments)
     # P9: the question limit is switched off in the test, unless a limit is asked for.
     session = Session(materials, intent, model, rule=rule, threshold=threshold, runs_dir=runs_dir, limit=limit).start()
     rows_for, asked, on_review = play(session, rows)
