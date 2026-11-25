@@ -2,7 +2,7 @@
 
 Everything in this folder is invented for testing ElicitAgent. The event, the hall and every person are fictional.
 
-We run the Folk Afternoon every year. This is the plan for this year's.
+We run the Folk Afternoon every month. This is the plan for this month's.
 
 ## The day
 

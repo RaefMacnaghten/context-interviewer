@@ -274,26 +274,26 @@ class _GoalModel(SimulatedModel):
 
 
 PLAN = "Please make the volunteer rota for the day and send it to everyone."
-NOTES = "Next year, someone should do the rota earlier."
+NOTES = "Next month, someone should do the rota earlier."
 
 
 def test_every_folder_goal_is_kept_as_a_side_or_named_in_the_reason(tmp_path):
     # two documents state a goal: one agrees with the intent, one differs
-    model = _GoalModel([_goal("g1", "event-plan.md", PLAN, True), _goal("g2", "last-year-notes.txt", NOTES, False)])
+    model = _GoalModel([_goal("g1", "event-plan.md", PLAN, True), _goal("g2", "last-month-notes.txt", NOTES, False)])
     s = Session(ROTA, "Make the rota and send it.", model, runs_dir=tmp_path).start()
     goal = s.items[0]
-    assert goal.state == "conflict" and [src["document"] for src in goal.sources] == ["the person", "last-year-notes.txt"]
+    assert goal.state == "conflict" and [src["document"] for src in goal.sources] == ["the person", "last-month-notes.txt"]
     assert "event-plan.md says the same" in goal.reason and PLAN in goal.reason
     assert set(goal.merged_from) == {"intent", "g1", "g2"}
     assert sum(1 for it in s.items if it.key == "goal") == 1
 
 
 def test_a_document_clash_about_the_goal_keeps_both_documents_with_an_intent(tmp_path):
-    model = _GoalModel([_goal("g1", "event-plan.md", PLAN, True), _goal("g2", "last-year-notes.txt", NOTES, True)])
+    model = _GoalModel([_goal("g1", "event-plan.md", PLAN, True), _goal("g2", "last-month-notes.txt", NOTES, True)])
     s = Session(ROTA, "Make the rota and send it.", model, runs_dir=tmp_path).start()
     first = s.items[0]
     assert first.id == "intent" and first.way == "said by the person"
-    assert "event-plan.md says the same" in first.reason and "last-year-notes.txt says the same" in first.reason
+    assert "event-plan.md says the same" in first.reason and "last-month-notes.txt says the same" in first.reason
 
 
 def test_a_goal_with_no_answer_on_agreement_counts_as_differing(tmp_path):
@@ -348,7 +348,7 @@ def test_progress_reports_every_step_with_real_counts(session):
     assert all(st["state"] == "done" and st["started"] and st["ended"] for st in p["steps"])
     read = p["steps"][0]
     assert read["n"] == read["of"] == 5 and read["summary"] == "5 read, 0 skipped"
-    assert {f["name"] for f in p["files"]} == {"event-plan.md", "hall-email.txt", "last-year-notes.txt",
+    assert {f["name"] for f in p["files"]} == {"event-plan.md", "hall-email.txt", "last-month-notes.txt",
                                                "roles-and-rules.md", "volunteers.csv"}
     assert sum(f["items"] for f in p["files"]) > 0
     assert p["steps"][2]["summary"] == "1 clash found"

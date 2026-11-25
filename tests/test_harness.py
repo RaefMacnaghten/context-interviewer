@@ -34,7 +34,9 @@ def test_both_sheets_parse_and_say_draft():
 
 def test_the_written_layout_is_read():
     r = {row.id: row for row in rows()}
-    assert len(r) == 70
+    assert len(r) == 67  # the 70-row draft less the author's three removals, ids kept
+    assert not {"R04", "R06", "R29"} & set(r)
+    assert r["R08"].tier == "confirm" and r["R43"].priority == "nice if possible"  # his first-round edits
     assert r["R23"].where == "file: event-plan.md"  # "event-plan.md: `Setup starts at 12:00. ...`"
     assert r["R27"].where == "clash"  # "Clash between event-plan.md: ... and hall-email.txt: ..."
     assert r["R27"].key_answer == "22:00" and r["R27"].explained  # "22:00. Pack down is 20:30 to 22:00 and ..."
