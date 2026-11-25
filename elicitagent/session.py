@@ -84,6 +84,8 @@ class Item:
     # it, so the Back button can show the reply and replace it
     reply_action: str | None = None
     before_reply: dict | None = None
+    # the model's wording of the question ({"question", "answer_form"}); None means the plain template is used
+    wording: dict | None = None
 
     @property
     def stated_or_inferred(self) -> str:
@@ -98,6 +100,24 @@ def value_supported(value: str | None, passage: str | None) -> bool:
     """A stated value with numbers in it (a time, a date, a count) must show those numbers in its passage."""
     numbers = re.findall(r"\d+(?::\d+)?", value or "")
     return all(n in (passage or "") for n in numbers)
+
+
+def _short(text: str | None, most: int = 100) -> str:
+    """A passage or value cut to about a line, at a word, with an ellipsis when cut."""
+    flat = " ".join((text or "").split())
+    if len(flat) <= most:
+        return flat
+    cut = flat[:most]
+    space = cut.rfind(" ")
+    return (cut[:space] if space > most // 2 else cut).rstrip(" ,;:.") + "…"
+
+
+def _sentence(text: str, end: str) -> str:
+    """A part of the question as a sentence: trimmed, ending with a full stop or question mark."""
+    text = " ".join((text or "").split())
+    if not text:
+        return ""
+    return text if text[-1] in ".?!" else text + end
 
 
 def _slug(text: str) -> str:
@@ -265,6 +285,7 @@ class Session:
         ("clash", "Checking for clashes"),
         ("second", "Second look for what is missing"),
         ("estimate", "Estimating the gaps"),
+        ("word", "Wording the questions"),
     ]
 
     def _progress_init(self) -> None:
@@ -414,12 +435,44 @@ class Session:
             it.model_would_ask = est.get("model_would_ask")
             self._decide(it)
         self._done("estimate", f"{len(gaps)} {'gap' if len(gaps) == 1 else 'gaps'} estimated and decided" if gaps else "no gaps to estimate")
+        # Every decision is made. One last call words the questions to be asked; it changes no decision, and a
+        # question it does not word (or a failed call) is worded from the plain template.
+        self._word_questions()
         for it in self.items:
             self._log(it, "decided", it.value)
         self._check_limit()
         self.status = "ready"
         self.progress["current"] = None
         return self
+
+    def _word_questions(self) -> None:
+        from .models import ModelError
+
+        to_word = [it for it in self.items if it.pending]
+        if not to_word:
+            self._done("word", "no questions to word")
+            return
+        self._step("word", n=0, of=len(to_word), detail=f"One model call words {len(to_word)} "
+                   f"{'question' if len(to_word) == 1 else 'questions'}; nothing is decided here")
+        try:
+            wording = self.model.word_questions(self.intent, self.folder, [self._wording_view(it) for it in to_word])
+        except ModelError:
+            wording = {}
+        for it in to_word:
+            w = wording.get(it.id) or {}
+            if str(w.get("question") or "").strip():
+                it.wording = {"question": str(w["question"]).strip(), "answer_form": str(w.get("answer_form") or "").strip()}
+        worded = sum(1 for it in to_word if it.wording)
+        self._done("word", f"{worded} of {len(to_word)} worded by the model, the rest from a plain template"
+                   if worded < len(to_word) else f"{worded} worded")
+
+    def _wording_view(self, it: Item) -> dict:
+        offered = it.candidates if (not it.named_person or self.documented(it)) else []
+        return {"id": it.id, "heading": it.heading, "label": it.label, "kind": it.kind,
+                "value": self.confirm_value(it) if it.kind == "confirm" else None,
+                "candidates": offered if it.kind == "choose" else [],
+                "document": it.document, "passage": it.passage, "about_named_person": it.named_person,
+                "clash": [{"document": src["document"], "value": src["value"]} for src in it.sources] or None}
 
     def _with_intent(self, items: list[Item]) -> list[Item]:
         """The intent becomes the first item under "Goal and deliverable", confirmed by the person, with the
@@ -683,11 +736,43 @@ class Session:
         return it.value or (it.candidates[0] if len(it.candidates) == 1 else None)
 
     def question_text(self, it: Item) -> str:
+        """The question as the person reads it, in three parts: what is needed (the model's wording, or a plain
+        template), why it is asked (what the files say or lack, built here from the passages, never by the model),
+        and what form of answer is wanted."""
+        w = it.wording or {}
+        ask = _sentence(w.get("question") or self._template_question(it), "?")
+        form = _sentence(w.get("answer_form") or self._template_form(it), ".")
+        return " ".join(part for part in (ask, self.why_asked(it), form) if part)
+
+    def _template_question(self, it: Item) -> str:
         if it.kind == "confirm":
-            return f"Is this right? {it.label}: {self.confirm_value(it)}"
+            return f'Is "{self.confirm_value(it)}" right for "{it.label}"?'
         if it.kind == "choose":
-            return f"Which is right? {it.label}"
-        return f"{it.label}?"
+            return f'Which is right for "{it.label}"?'
+        return f'What should the brief say for "{it.label}"?'
+
+    @staticmethod
+    def _template_form(it: Item) -> str:
+        if it.kind == "confirm":
+            return "Answer yes, or type the right value."
+        if it.kind == "choose":
+            return "Pick one, or type another answer."
+        return "Answer in a few words."
+
+    @staticmethod
+    def why_asked(it: Item) -> str:
+        """What the files say or lack, from the passages the tool holds."""
+        if it.ask_first:
+            return "What you typed and the folder disagree about the goal."
+        if it.sources:
+            sides = "; ".join((f'you typed "{_short(src["value"])}"' if src.get("person")
+                               else f'{src["document"]} says "{_short(src["value"])}"') for src in it.sources)
+            return f"The documents disagree: {sides}."
+        if it.document and it.passage_found and it.passage:
+            return f'{it.document} says "{_short(it.passage)}".'
+        if it.document:
+            return f"{it.document} does not say it outright."
+        return "Nothing in the folder says it."
 
     def get(self, item_id: str) -> Item:
         for it in self.items:

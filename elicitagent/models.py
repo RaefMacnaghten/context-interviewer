@@ -111,6 +111,12 @@ class Model(ABC):
         """Per item id: chance_wrong (0 to 1), can_undo, would_notice, model_would_ask. on_partial(number of gaps
         estimated so far) is called as the reply arrives."""
 
+    def word_questions(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
+        """Per item id: {"question": one plain sentence asking for exactly what is needed, "answer_form": what kind of
+        answer is wanted}. Wording only: it is asked after every decision is made and changes none of them. Missing
+        entries are worded from a plain template, so an empty reply is always safe."""
+        return {}
+
 
 # ---------------------------------------------------------------- simulated
 
@@ -153,6 +159,11 @@ class SimulatedModel(Model):
         if on_partial:
             on_partial(len(items))
         return {item["id"]: found.get(item["id"]) for item in items}
+
+    def word_questions(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
+        # a script may word its questions; one that does not is worded from the plain template
+        wording = self.script.get("wording", {})
+        return {item["id"]: wording[item["id"]] for item in items if item["id"] in wording}
 
     def estimate(self, intent: str, folder: Folder, items: list[dict], on_partial=None) -> dict[str, dict]:
         by_id = {raw["id"]: raw.get("estimate", {}) for raw in self.script["items"]}
@@ -291,6 +302,32 @@ ESTIMATE_SCHEMA = {
 }
 
 
+WORDING_SYSTEM = """You write the questions a person is asked about a task they are handing to an AI agent. Everything has already been decided: these items will be asked. Your only job is the wording.
+
+For each item write:
+- question: one full, plain sentence ending with a question mark that says exactly what is needed, naming the person, thing or date it is about. Ask about the real-world fact, not about a label: "When can Kit Inventa work on the day?", not "Kit Inventa's availability?". For a confirm item, ask whether the given value is right ("Is the hall free from 11:00?"). For a choose item, ask which of the given values is right, without listing them. For an open item, ask for the value.
+- answer_form: one short sentence saying what form of answer is wanted, such as "Give times, or \"all day\"." or "Give a number of pints a day." or "Answer yes or no."
+
+Do not say why the question is asked: that is added separately from the files. Do not add facts that are not in the item or the folder. Use plain words and the names as they appear. Return one entry per item id."""
+
+WORDING_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "questions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {"id": {"type": "string"}, "question": {"type": "string"}, "answer_form": {"type": "string"}},
+                "required": ["id", "question", "answer_form"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["questions"],
+    "additionalProperties": False,
+}
+
+
 def _plain(text: str) -> str:
     return " ".join("".join(c.lower() if c.isalnum() else " " for c in text).split())
 
@@ -397,6 +434,16 @@ class AnthropicModel(Model):
         on_text = (lambda buf: on_partial(len(complete_objects(buf, "estimates")))) if on_partial else None
         data = self._call(ESTIMATE_SYSTEM, user, ESTIMATE_SCHEMA, on_text)
         return {e["id"]: e for e in data["estimates"]}
+
+    def word_questions(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
+        if not items:
+            return {}
+        user = (f"{_intent_block(intent)}\n\nThe folder:\n{_folder_as_text(folder)}\n\n"
+                f"The questions to word:\n{json.dumps(items, indent=1)}")
+        data = self._call(WORDING_SYSTEM, user, WORDING_SCHEMA)
+        wanted = {item["id"] for item in items}
+        return {q["id"]: {"question": q["question"].strip(), "answer_form": q["answer_form"].strip()}
+                for q in data["questions"] if q.get("id") in wanted and q.get("question", "").strip()}
 
 
 def make_model(choice: str, folder_path: str | Path, model_name: str | None = None) -> Model:

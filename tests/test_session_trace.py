@@ -344,7 +344,7 @@ def test_error_text_never_shows_a_key_or_header():
 def test_progress_reports_every_step_with_real_counts(session):
     p = session.progress
     assert session.status == "ready" and p["current"] is None
-    assert [st["key"] for st in p["steps"]] == ["read", "first", "clash", "second", "estimate"]
+    assert [st["key"] for st in p["steps"]] == ["read", "first", "clash", "second", "estimate", "word"]
     assert all(st["state"] == "done" and st["started"] and st["ended"] for st in p["steps"])
     read = p["steps"][0]
     assert read["n"] == read["of"] == 5 and read["summary"] == "5 read, 0 skipped"

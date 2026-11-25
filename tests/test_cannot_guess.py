@@ -326,7 +326,7 @@ def test_a_confirm_question_with_a_candidate_but_no_value_asks_about_the_candida
     s = Session(folder, "", SimulatedModel.for_folder(folder), runs_dir=tmp_path / "runs", limit=None).start()
     it = s.get("c1")
     assert it.kind == "confirm" and it.pending
-    assert s.question_text(it) == "Is this right? How the agent sends the plan: Email"
+    assert s.question_text(it).startswith("Is \"Email\" right for \"How the agent sends the plan\"?")
     while (q := s.current_question()) is not None and q.id != "c1":
         s.reply(q.id, "skip")
     view = s.view()["question"]
