@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <title>ElicitAgent</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="app-top">
+    <div class="logo"><span class="mk" aria-hidden="true">E</span>ElicitAgent</div>
+    <div id="task-name" class="task-name" hidden></div>
+    <span id="model-badge" class="badge" hidden></span>
+    <span id="run-label" class="run-label"></span>
+    <span class="sp"></span>
+    <div id="meter" class="meter" hidden></div>
+  </header>
+  <nav id="steps" class="steps" aria-label="Where you are"></nav>
+
+  <main id="app">
+    <section id="start" class="start">
+      <h1 class="h-app">Hand a task to an agent</h1>
+      <p class="sub">ElicitAgent reads the folder first, then asks only what the folder does not settle.</p>
+      <form id="start-form">
+        <div class="pick">
+          <section class="panel pick-intent-panel">
+            <label class="pick-intent ph numbered" for="intent-input">What do you want the agent to do? <span class="hint">One or two sentences</span></label>
+            <div class="pb">
+              <textarea id="intent-input" rows="4" placeholder="Leave it empty and the tool works out the goal from the folder."></textarea>
+            </div>
+          </section>
+          <section class="panel pick-folder">
+            <div class="ph numbered">The folder</div>
+            <div class="pb">
+              <label class="field">Folder of materials
+                <select id="task-select"></select>
+              </label>
+              <label class="field">Or a folder path
+                <input id="folder-input" type="text" placeholder="tasks/rota/materials" autocomplete="off" spellcheck="false">
+              </label>
+            </div>
+          </section>
+        </div>
+        <section id="tree-pane" class="panel tree-pane" aria-live="polite"></section>
+        <section class="panel">
+          <div class="pb row">
+            <label class="field">Rule
+              <select id="rule-select"></select>
+            </label>
+            <label class="field">Question limit, in questions
+              <input id="limit-input" type="text" inputmode="numeric" placeholder="none">
+            </label>
+            <label class="field">Model
+              <select id="model-select">
+                <option value="auto">Automatic</option>
+                <option value="simulated">Simulated (no key needed)</option>
+                <option value="anthropic">Anthropic API</option>
+              </select>
+            </label>
+          </div>
+        </section>
+        <p id="start-error" class="callout bad" role="alert" hidden></p>
+        <button type="submit" class="b pr big">Read the folder</button>
+      </form>
+    </section>
+
+    <section id="interview" class="ws" hidden>
+      <aside class="left">
+        <div id="question-pane" class="panel q-pane"></div>
+        <div id="progress-pane" class="panel progress-pane"></div>
+      </aside>
+      <section class="right">
+        <div id="items-pane" class="panel items-pane"></div>
+        <div id="brief-pane" class="brief-pane" hidden></div>
+      </section>
+    </section>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

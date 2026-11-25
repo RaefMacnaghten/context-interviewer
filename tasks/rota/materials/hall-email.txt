@@ -1,0 +1,16 @@
+From: Bookings, Larkfield Community Hall <bookings@larkfield-hall.example.org>
+To: Organiser <organiser@example.org>
+Subject: Your booking on Saturday 6 March 2027
+
+Hello,
+
+Thank you for booking the main hall for Saturday 6 March 2027.
+
+Keys can be collected from the caretaker at 11:30 on the day.
+
+Please note that the hall must be empty and locked by 22:00. Our licence does not allow later use.
+
+The caretaker will send the alarm code for locking up nearer the time.
+
+Kind regards,
+Bookings team

@@ -1,0 +1,41 @@
+id,date,from_name,from_email,subject,body
+E01,2026-11-09 08:12,Mira Landlordson,mira@lettings.example.org,Boiler service visit,"Hi, the boiler engineer will come on Monday 23 November between 9 and 12. Please make sure someone is in or let me know by Friday if that does not work. Mira"
+E02,2026-11-09 09:40,The Weekly Sprout,news@weeklysprout.example.org,This week: winter vegetables,Our newsletter: ten winter vegetables you can still plant. Unsubscribe at the bottom of this email.
+E03,2026-11-09 12:03,Tess Example,tess@example.org,Mum's birthday,Hey! Are you still up for splitting the present for Mum? I was thinking the pottery class. Let me know this week x
+E04,2026-11-09 18:22,Harmony Lane Choir,rehearsals@harmonylane.example.org,Rehearsal moved to the church hall,"This Tuesday's rehearsal is in the church hall, not the school. Same time, 19:30."
+E05,2026-11-10 07:55,Brightwater Energy,billing@brightwater.example.org,Your bill is ready,Your electricity bill of 64.20 is ready. Payment is due on 18 November 2026.
+E06,2026-11-10 10:14,Rowan Fakely,rowan.fakely@example.org,Coffee sometime?,Long time no see! I'm back in town for a few weeks. Fancy a coffee? Rowan
+E07,2026-11-10 13:30,Shop Neverwhere,offers@shopneverwhere.example.org,40% off everything this weekend,Our biggest sale of the year starts Friday. Shop now.
+E08,2026-11-10 16:48,Larkfield Library,noreply@larkfieldlibrary.example.org,Reminder: book due back,The book 'A History of Invented Places' is due back on 17 November 2026.
+E09,2026-11-11 08:01,Page Turners Book Club,bookclub@pageturners.example.org,Book club is moving to Wednesdays,"From this month book club meets on Wednesdays instead of Thursdays, same place, 19:00. Next meeting Wednesday 25 November. Please reply if you can make it."
+E10,2026-11-11 09:15,Otto Wrenchley,otto@wrenchley-plumbing.example.org,Kitchen tap,Fixed the kitchen tap this morning. Invoice to follow once I have the price of the part.
+E11,2026-11-11 11:20,The Weekly Sprout,news@weeklysprout.example.org,Readers' photos,This week's newsletter is all about your allotment photos.
+E12,2026-11-11 14:05,Parcel Tracker,track@parcels.example.org,Your parcel is on its way,Parcel 0042 will arrive on Thursday 12 November.
+E13,2026-11-11 19:44,Tess Example,tess@example.org,Re: Mum's birthday,"Booked the pottery class! It was 80, so 40 each. Can you send me your half?"
+E14,2026-11-12 08:30,Harmony Lane Choir,rehearsals@harmonylane.example.org,Concert dates,Our winter concert is on Saturday 12 December. Please tell us by 30 November if you can sing.
+E15,2026-11-12 10:10,Clearwater Council,council-tax@clearwater.example.org,Council tax reminder,Your council tax instalment of 120.00 is due on 1 December 2026.
+E16,2026-11-12 12:45,Jo Imaginary,jo.imaginary@example.org,Spare tickets,I have two spare tickets for the theatre on Saturday 21 November. Do you want them?
+E17,2026-11-12 15:00,Shop Neverwhere,offers@shopneverwhere.example.org,Last chance: sale ends tonight,Sale ends at midnight.
+E18,2026-11-13 07:20,Mira Landlordson,mira@lettings.example.org,Rent increase from January,I am writing to let you know the rent will go up by 25 a month from 1 January 2027. Happy to talk it over.
+E19,2026-11-13 09:00,Gym Nowhere,members@gymnowhere.example.org,Your membership renews soon,Your yearly membership renews on 30 November 2026 for 240.00 unless you cancel.
+E20,2026-11-13 13:13,Page Turners Book Club,bookclub@pageturners.example.org,This month's book,This month we are reading 'The Lighthouse That Wasn't'. Copies are at the library.
+E21,2026-11-13 17:40,Sam Notaperson,sam.notaperson@example.org,For a previous tenant,"Hi, is Alex Formerly still at this address? I have a letter for them."
+E22,2026-11-14 08:05,The Weekly Sprout,news@weeklysprout.example.org,Frost warning,Newsletter special: protect your plants from the first frost.
+E23,2026-11-14 10:30,Brightwater Energy,billing@brightwater.example.org,Payment reminder,A reminder that your bill of 64.20 is due on 18 November 2026.
+E24,2026-11-14 11:11,Rowan Fakely,rowan.fakely@example.org,Re: Coffee sometime?,How about Thursday 19th at the cafe on Mill Road? 10:30?
+E25,2026-11-14 16:20,Harmony Lane Choir,rehearsals@harmonylane.example.org,Music for the concert,Attached is the music for the winter concert. Please learn the alto part.
+E26,2026-11-15 09:45,Shop Neverwhere,offers@shopneverwhere.example.org,We miss you,Here is 10% off your next order.
+E27,2026-11-15 12:00,Tess Example,tess@example.org,Christmas plans,Are you coming to mine for Christmas this year? Need to know numbers by the end of the month.
+E28,2026-11-15 18:30,Neighbourhood Watch,watch@larkfieldwatch.example.org,Meeting minutes,Minutes from the last neighbourhood meeting are attached.
+E29,2026-11-16 08:15,Otto Wrenchley,otto@wrenchley-plumbing.example.org,Re: Kitchen tap,Still waiting on the supplier for the part price. Will send the invoice when I have it.
+E30,2026-11-16 09:30,Clearwater Dental,appointments@clearwaterdental.example.org,Appointment reminder,You have a check-up on Monday 23 November at 09:15. Reply C to confirm or call us to change it.
+E31,2026-11-16 13:50,The Weekly Sprout,news@weeklysprout.example.org,Seed swap,Join our online seed swap next week.
+E32,2026-11-17 07:45,Mira Landlordson,mira@lettings.example.org,Re: Boiler service visit,"Just checking you saw my message about Monday 23 November. Thanks, Mira"
+E33,2026-11-17 10:05,Page Turners Book Club,bookclub@pageturners.example.org,Reminder: reply for Wednesday,Please let us know if you are coming on Wednesday 25 November so we can book the room.
+E34,2026-11-17 14:40,Jo Imaginary,jo.imaginary@example.org,Re: Spare tickets,"No worries if not, I can give them to someone else. Let me know by Wednesday."
+E35,2026-11-18 09:00,Parcel Tracker,track@parcels.example.org,Delivered,Parcel 0042 was delivered and left with a neighbour at number 12.
+E36,2026-11-18 11:30,Harmony Lane Choir,rehearsals@harmonylane.example.org,Raffle prizes,Does anyone have a raffle prize for the concert? Reply to this email.
+E37,2026-11-19 08:20,Shop Neverwhere,offers@shopneverwhere.example.org,New arrivals,See what's new this week.
+E38,2026-11-19 15:15,Larkfield Library,noreply@larkfieldlibrary.example.org,Overdue item,'A History of Invented Places' is now overdue. A charge of 0.20 a day applies.
+E39,2026-11-20 10:00,Gym Nowhere,members@gymnowhere.example.org,Last reminder: renewal,Your membership renews on 30 November 2026. Cancel online before then if you do not want to renew.
+E40,2026-11-21 09:30,The Weekly Sprout,news@weeklysprout.example.org,Planning next year's garden,Newsletter: how to plan next year's beds.

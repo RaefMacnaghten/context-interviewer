@@ -1,0 +1,23 @@
+# Keys and secrets: never commit these
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*secret*
+*credentials*
+
+# Python and uv
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+
+# Run outputs (briefs and gap traces written by the tool)
+runs/
+
+# Local tool settings
+.claude/
