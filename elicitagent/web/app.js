@@ -6,6 +6,7 @@ let view = null;
 let editing = null; // id of the item being edited
 let whyOpen = false; // the "why this question" panel
 const openSources = new Set(); // item ids whose source passage is expanded
+const hiddenStates = new Set(); // the brief filter: statuses whose items are hidden (display only)
 
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -725,13 +726,14 @@ function renderItems() {
   const body = el("div", { class: "pb" });
   pane.append(body);
   body.append(stillOpenBlock());
-  if (!reading) body.append(el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => stateChip(s, `${counts[s]} ${shownLower(s)}`))));
+  if (!reading) body.append(briefFilter(order, counts));
   if (!view.intent && !reading) body.append(el("p", { class: "callout quiet doc-request" }, "You did not say what you want the agent to do, so the goal comes from the folder."));
   for (const heading of view.headings) {
-    const items = view.items.filter((i) => i.heading === heading);
-    body.append(el("div", { class: "sec-h" }, heading, el("span", { class: "cnt" }, items.length ? String(items.length) : "")));
+    const all = view.items.filter((i) => i.heading === heading);
+    const items = reading ? all : all.filter((i) => !hiddenStates.has(i.rejected ? "rejected" : i.state));
+    body.append(el("div", { class: "sec-h" }, heading, el("span", { class: "cnt" }, all.length ? String(all.length) : "")));
     if (!items.length) {
-      body.append(el("div", { class: "empty-row" }, reading ? "Nothing yet." : "Nothing here yet."));
+      body.append(el("div", { class: "empty-row" }, all.length ? `${all.length} hidden by the filter.` : reading ? "Nothing yet." : "Nothing here yet."));
       continue;
     }
     const list = el("ul", { class: "items-list" });
@@ -765,6 +767,20 @@ function renderItems() {
     }
     body.append(list);
   }
+}
+
+// The filter on the brief in progress: each count chip shows or hides the items in that status, and "Hide
+// confirmed" is a switch for the commonest case. Display only: nothing about the items changes.
+function briefFilter(order, counts) {
+  const toggle = (state) => { hiddenStates.has(state) ? hiddenStates.delete(state) : hiddenStates.add(state); renderItems(); };
+  const chips = order.filter((s) => counts[s]).map((s) => el("button", {
+    class: `chip-btn ${hiddenStates.has(s) ? "off" : ""}`, type: "button", "aria-pressed": hiddenStates.has(s) ? "false" : "true",
+    title: hiddenStates.has(s) ? "Hidden: press to show" : "Shown: press to hide", onclick: () => toggle(s),
+  }, stateChip(s, `${counts[s]} ${shownLower(s)}`)));
+  const hideConfirmed = el("input", { type: "checkbox", checked: hiddenStates.has("confirmed"), onchange: () => toggle("confirmed") });
+  return el("div", { class: "filter-row" },
+    el("div", { class: "legend", role: "group", "aria-label": "Show or hide items by status" }, chips),
+    counts.confirmed ? el("label", { class: "switch" }, hideConfirmed, el("span", {}, "Hide confirmed")) : null);
 }
 
 function renderBrief() {

@@ -40,3 +40,12 @@ def test_brief_items_show_a_short_excerpt_beside_the_source_link():
     assert "function excerpt(" in js
     css = (APP.parent / "style.css").read_text(encoding="utf-8")
     assert ".source-excerpt" in css and "text-overflow: ellipsis" in css
+
+
+def test_the_brief_can_be_filtered_by_status():
+    # the author's request of 25 Nov 2026: hide the confirmed items, or filter the brief items
+    js = APP.read_text(encoding="utf-8")
+    body = _function(js, "briefFilter")
+    assert '"aria-pressed"' in body and "Hide confirmed" in body and "hiddenStates" in body
+    items = _function(js, "renderItems")
+    assert "briefFilter(order, counts)" in items and "hiddenStates.has(" in items and "hidden by the filter" in items
