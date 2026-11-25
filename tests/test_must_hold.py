@@ -177,3 +177,56 @@ def test_a_confirm_question_with_a_candidate_but_no_value_asks_about_the_candida
     assert view["item"] == "c1" and view["value"] == "Email"
     s.reply("c1", "answer", view["value"])
     assert s.get("c1").value == "Email" and s.get("c1").state == "confirmed"
+
+
+def _with_item(tmp_path, raw):
+    folder = shed_task(tmp_path)
+    script = json.loads((folder.parent / "simulated-model.json").read_text())
+    script["items"].append(raw)
+    (folder.parent / "simulated-model.json").write_text(json.dumps(script))
+    return Session(folder, "", SimulatedModel.for_folder(folder), runs_dir=tmp_path / "runs", limit=None).start()
+
+
+def test_a_named_persons_value_the_model_only_thinks_plausible_is_an_open_question(tmp_path):
+    raw = {"id": "n1", "heading": "People", "key": "dob", "label": "Sam Example's date of birth", "value": None,
+           "candidates": ["1 May 1990"], "stated": False, "must_hold": True, "document": None, "passage": None,
+           "about_named_person": True, "estimate": {"chance_wrong": 0.5, "can_undo": True, "would_notice": True}}
+    it = _with_item(tmp_path, raw).get("n1")
+    assert it.way == "ask" and it.kind == "open"
+    assert "no value for it is documented" in it.reason.lower()
+
+
+def test_a_named_persons_value_a_file_holds_is_confirmed():
+    # on the rota stand-in, Fenn Mockridge's bar question rests on the line in volunteers.csv
+    rota = Path(__file__).resolve().parent.parent / "tasks" / "rota" / "materials"
+    import tempfile
+
+    s = Session(rota, "", SimulatedModel.for_folder(rota), runs_dir=tempfile.mkdtemp(), limit=None).start()
+    it = s.get("s05")
+    assert it.named_person and it.document == "volunteers.csv" and it.passage_found
+    assert it.kind == "confirm" and "a file holds a value, so you confirm it" in it.reason
+
+
+def test_reject_then_restore_keeps_the_question(tmp_path):
+    s = shed(tmp_path, limit=None)
+    before = [it.id for it in s.queue()]
+    s.control("p1", "reject")
+    assert "p1" not in [it.id for it in s.queue()]
+    s.control("p1", "restore")
+    assert [it.id for it in s.queue()] == before
+
+
+@pytest.mark.parametrize("bad", ["inf", "1e400", "nan", True])
+def test_odd_limits_are_refused_plainly(tmp_path, bad):
+    with pytest.raises(ValueError, match="question limit"):
+        Session(shed_task(tmp_path), "", SimulatedModel.for_folder(shed_task(tmp_path / "b")), runs_dir=tmp_path, limit=bad)
+
+
+def test_nothing_changes_after_the_brief_is_written(tmp_path):
+    s = shed(tmp_path, limit=None)
+    q = s.current_question()
+    s.finish()
+    for call in (lambda: s.reply(q.id, "skip"), lambda: s.control("r1", "reject"),
+                 lambda: s.answer_on_review("r1", "green")):
+        with pytest.raises(ValueError):
+            call()

@@ -602,7 +602,7 @@ He agreed the must-hold branch as proposed. This is a change to the approved pla
 
 **Question:** What the person sees as the question limit.
 
-**AI recommendation:** The approved plan (P9) counted the limit in question cost, which the person saw as "question cost 3 of 8". The AI's reading of his run's trace, not his words: his run stopped at question cost 3 of 8 after two questions. The AI proposed that the limit shown to the person be a number of questions, starting at 8, with question cost kept inside the rule, the gap trace and the "why this question" panel.
+**AI recommendation:** The approved plan (P9) counted the limit in question cost, which the person saw as question cost against the limit. The AI's reading of his run's trace, not his words: his run stopped at question cost 3 of 8 after two questions. The AI proposed that the limit shown to the person be a number of questions, starting at 8, with question cost kept inside the rule, the gap trace and the "why this question" panel.
 
 **Author's decision:** The author's message, after his own real-model run, as in entry 32:
 

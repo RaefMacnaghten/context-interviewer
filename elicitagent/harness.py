@@ -139,7 +139,7 @@ def is_waste(it: Item, row: SheetRow | None) -> bool | None:
     """A question whose answer the folder held still counts as waste. None when the sheet has no row for the item."""
     if row is None:
         return None
-    return bool(it.asked) and row.where.strip().lower().startswith("file:")
+    return bool(it.asked or it.answered_on_review) and row.where.strip().lower().startswith("file:")
 
 
 def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", threshold: float | None = None,
@@ -185,7 +185,8 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
         outcome = mark(it, row)
         waste = is_waste(it, row)
         outcomes[it.id] = {"label": it.label, "row": row.id if row else None, "state": it.state, "value": it.value,
-                           "way": it.way, "outcome": outcome, "waste": waste}
+                           "way": it.way, "answered_on_review": it.answered_on_review, "outcome": outcome,
+                           "waste": waste}
         session._log(it, "outcome", it.value, outcome, waste)
     missed = [r.id for r in rows if r.id not in matched_rows]
 
@@ -215,6 +216,8 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
         "questions": [{"item": i, "kind": k, "reply": a, "row": r} for i, k, a, r in asked],
         "answered_on_review": [{"item": i, "kind": k, "question_cost": c, "row": r} for i, k, c, r in on_review],
         "answered_on_review_question_cost": sum(c for _, _, c, _ in on_review),
+        # the proposal for the test's cost axis: questions asked plus what was answered on the end screen
+        "question_cost_including_review": session.running_cost + sum(c for _, _, c, _ in on_review),
         "items": outcomes,
     }
     (session.run_dir / "dry-run-summary.json").write_text(json.dumps(summary, indent=2), encoding="utf-8")

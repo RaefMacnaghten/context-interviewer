@@ -417,12 +417,13 @@ function editBox(it) {
 }
 
 // Plan change 1: a waiting or open item can be answered on the end screen. The values the documents give are
-// offered as buttons; anything else can be typed.
+// offered as buttons (only when the item's values come from the folder); anything else can be typed.
 function reviewAnswer(it) {
+  const documented = (it.sources && it.sources.length) || (it.document && it.passage_found);
   const box = el("input", { type: "text", placeholder: "Your answer", "aria-label": `Your answer: ${it.label}` });
   const send = (v) => reviewReply(it.id, v);
   box.addEventListener("keydown", (ev) => { if (ev.key === "Enter") send(box.value); });
-  const picks = (it.candidates || []).slice(0, 4).map((c) => el("button", { class: "b sm", onclick: () => send(c) }, c));
+  const picks = (documented ? it.candidates || [] : []).slice(0, 4).map((c) => el("button", { class: "b sm", onclick: () => send(c) }, c));
   return el("div", { class: "rv-answer" }, picks.length ? el("div", { class: "brow" }, picks) : null,
     el("div", { class: "typed" }, box, el("button", { class: "b sm", onclick: () => send(box.value) }, "Answer")));
 }
@@ -488,7 +489,7 @@ function renderLimit(pane) {
       el("div", { class: "brow" },
         el("button", { class: "b pr", onclick: () => limitChoice("continue") }, `Continue (${config.limit_start} more questions)`),
         el("button", { class: "b", onclick: () => limitChoice("stop") }, "Stop here")),
-      el("p", { class: "small" }, "If you stop: anything that cannot be undone, any fact about a named person and any clash is left open for the agent to ask; the rest is guessed and marked assumed.")),
+      el("p", { class: "small" }, "If you stop: anything that cannot be undone, any fact about a named person, anything with nothing to guess from and any clash is left open for the agent to ask; the rest is guessed and marked assumed.")),
   );
 }
 
@@ -675,7 +676,8 @@ function renderItems() {
       const tags = [
         el("span", { class: `tag ${said ? "you" : it.stated_or_inferred}` }, said ? "your intent" : it.stated_or_inferred),
         el("span", { class: `tag ${it.must_hold_or_nice === "must hold" ? "must" : "nice"}` }, it.must_hold_or_nice),
-        it.way ? el("span", { class: "tag way" }, it.way) : null,
+        it.answered_on_review ? el("span", { class: "tag way" }, "answered on review")
+          : it.way ? el("span", { class: "tag way" }, it.way) : null,
         it.document ? el("span", { class: "src" }, it.document) : null,
         it.who_could ? el("span", { class: "tag" }, `who could: ${it.who_could}`) : null,
         it.source === "person" && !said ? el("span", { class: "src you" }, "settled by you") : null,

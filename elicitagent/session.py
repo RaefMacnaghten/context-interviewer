@@ -4,6 +4,7 @@ brief and the gap trace."""
 from __future__ import annotations
 
 import re
+import math
 import time
 import uuid
 from dataclasses import asdict, dataclass, field
@@ -152,11 +153,13 @@ def task_name_for(folder_path: str | Path) -> str:
 
 def _whole(limit) -> int:
     """The question limit: a whole number of questions, 0 or more."""
+    if isinstance(limit, bool):
+        raise ValueError("The question limit is a number of questions, or none.")
     try:
         n = float(limit)
     except (TypeError, ValueError):
         raise ValueError("The question limit is a number of questions, or none.") from None
-    if n < 0 or n != int(n):
+    if not math.isfinite(n) or n < 0 or n != int(n):
         raise ValueError("The question limit is a whole number of questions, or none.")
     return int(n)
 
@@ -485,12 +488,20 @@ class Session:
             "conflict": [{"document": src["document"], "value": src["value"], "passage": src["passage"]} for src in it.sources] or None,
         }
 
+    @staticmethod
+    def documented(it: Item) -> bool:
+        """Whether the item's values come from the folder: a passage found in its document, or a clash's sources."""
+        return bool(it.sources) or bool(it.document and it.passage_found)
+
     def _gap(self, it: Item) -> Gap:
+        # Plan change 3: for a personal fact about a named person, only a value a file holds is offered to confirm
+        # or choose; a value the model only thinks plausible is not, so the question is open.
+        offered = len(it.candidates) if (not it.named_person or self.documented(it)) else 0
         return Gap(
             chance_wrong=it.chance_wrong,
             can_undo=it.can_undo,
             would_notice=it.would_notice,
-            candidates=len(it.candidates),
+            candidates=offered,
             named_person=it.named_person,
             conflict=it.state == "conflict",
             model_would_ask=it.model_would_ask,
@@ -560,8 +571,13 @@ class Session:
                       f"limit {self.limit} questions; at least {need['questions']} more questions "
                       f"(question cost {need['cost']:g})")
 
+    def _not_finished(self) -> None:
+        if self.finished:
+            raise ValueError("the brief is already written")
+
     def limit_choice(self, action: str) -> None:
         """At the limit the person continues (another round of the starting limit) or stops (P7, P8)."""
+        self._not_finished()
         if not self.at_limit():
             raise ValueError("the question limit has not been reached")
         head = self.queue()[0]
@@ -618,6 +634,7 @@ class Session:
         Skip means not now: the item stays open. "I can't answer this" means asking this person again will not
         help: the item becomes "not available here", with who could answer it if the person names someone.
         """
+        self._not_finished()
         it = self.get(item_id)
         if not it.pending:
             raise ValueError(f"{item_id} is not waiting for a reply")
@@ -669,6 +686,7 @@ class Session:
         confirm: the current value is right. edit: replace the value. reject: the item does not belong in
         the brief. restore: undo a reject. If the item was waiting for a question, the question is dropped.
         """
+        self._not_finished()
         it = self.get(item_id)
         if action == "confirm":
             if not it.value or it.state == "conflict":
@@ -696,8 +714,9 @@ class Session:
             logged = it.value
         else:
             raise ValueError(f"unknown control: {action}")
-        if action != "restore" and it.pending:
+        if action in ("confirm", "edit") and it.pending:
             it.pending = False  # settled by the person without the question being asked
+        # a rejected item stays queued but is left out of the queue; restoring it brings its question back
         self._log(it, action, logged)
         self._check_limit()
         return it

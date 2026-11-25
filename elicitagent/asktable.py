@@ -96,7 +96,7 @@ class AskTable:
             return " a file holds a value, so you confirm it."
         if kind == "choose":
             return " the files hold more than one value, so you choose."
-        return " nothing is documented, so it is an open question."
+        return " no value for it is documented, so it is an open question."
 
     def must_hold_applies(self, rule: str) -> bool:
         return bool(self.must_hold.get("ask_when_not_guessed", False)) and rule in self.must_hold.get("rules", [])
@@ -140,7 +140,7 @@ class AskTable:
         if asks:
             way = "ask"
             if rule == "cost-weighted":
-                reason = f"Asked: a guess here is about {pct} likely to be wrong and the harm is {band}, which outweighs {"an" if kind == "open" else "a"} {kind} question."
+                reason = f"Asked: a guess here is about {pct} likely to be wrong and the harm is {band}, which outweighs {'an' if kind == 'open' else 'a'} {kind} question."
             elif rule == "confidence-only":
                 reason = f"Asked: a guess here is about {pct} likely to be wrong, at or above the {threshold:g} line."
             elif rule == "model-decides":
@@ -160,7 +160,7 @@ class AskTable:
             reason = "Left open: there is nothing to guess from."
         else:
             way = "guess and mark it"
-            reason = f"Guessed and marked: about {pct} likely to be wrong with {band} harm, not worth {"an" if kind == "open" else "a"} {kind} question."
+            reason = f"Guessed and marked: about {pct} likely to be wrong with {band} harm, not worth {'an' if kind == 'open' else 'a'} {kind} question."
         if way == "wait" and gap.must_hold and self.must_hold_applies(rule):
             # plan change 1: what must hold and will not be guessed is asked now, not left for the agent
             way, asks = "ask", True
