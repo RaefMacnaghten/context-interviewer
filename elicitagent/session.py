@@ -846,9 +846,16 @@ class Session:
             return None
         return it.way
 
+    @staticmethod
+    def can_confirm(it: Item) -> bool:
+        """Whether the Confirm button shows: only on an item with one value that is not yet confirmed (a guess, or
+        a waiting item that has a value). A confirmed item, from a file or from the person, has nothing to confirm."""
+        return bool(it.value) and not it.rejected and it.state in ("assumed", "open")
+
     def item_view(self, it: Item) -> dict:
         d = asdict(it)
         d["way_tag"] = self.way_tag(it)
+        d["can_confirm"] = self.can_confirm(it)
         d["stated_or_inferred"] = it.stated_or_inferred
         d["must_hold_or_nice"] = it.must_hold_or_nice
         doc = self.folder.get(it.document) if (self.folder and it.document) else None

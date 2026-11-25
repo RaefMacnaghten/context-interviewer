@@ -409,9 +409,8 @@ function itemControls(it) {
   if (it.rejected) {
     return el("div", { class: "ctl" }, el("button", { class: "cb", onclick: () => control(it.id, "restore") }, "Restore"));
   }
-  const canConfirm = it.value && it.state !== "conflict" && !(it.state === "confirmed" && it.source === "person");
   return el("div", { class: "ctl" },
-    canConfirm ? el("button", { class: "cb", title: "The value is right", "aria-label": `Confirm: ${it.label}`, onclick: () => control(it.id, "confirm") }, "Confirm") : null,
+    it.can_confirm ? el("button", { class: "cb", title: "The value is right", "aria-label": `Confirm: ${it.label}`, onclick: () => control(it.id, "confirm") }, "Confirm") : null,
     el("button", { class: "cb", title: "Change the value", "aria-label": `Edit: ${it.label}`, onclick: () => { editing = it.id; renderItems(); } }, "Edit"),
     el("button", { class: "cb", title: "This does not belong in the brief", "aria-label": `Reject: ${it.label}`, onclick: () => control(it.id, "reject") }, "Reject"),
   );

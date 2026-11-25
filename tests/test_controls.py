@@ -113,3 +113,18 @@ def test_an_item_nobody_here_can_answer_shows_its_status_once(tmp_path):
     assert other["way_tag"] == "read a file (first look)"
     js = (Path(__file__).resolve().parent.parent / "elicitagent" / "web" / "app.js").read_text()
     assert "it.way_tag ?" in js and 'class: "tag way" }, it.way)' not in js
+
+
+def test_a_confirmed_item_has_no_confirm_button(tmp_path):
+    # seen by the author on "Format the rota is delivered in": a confirmed item still showed Confirm
+    s = Session(ROTA, "", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, limit=None).start()
+    views = {v["id"]: v for v in s.view()["items"]}
+    from_file = [v for v in views.values() if v["state"] == "confirmed"]
+    assert from_file and not any(v["can_confirm"] for v in from_file)
+    guessed = [v for v in views.values() if v["state"] == "assumed"]
+    assert guessed and all(v["can_confirm"] for v in guessed)
+    s.control(guessed[0]["id"], "confirm")
+    assert not next(v for v in s.view()["items"] if v["id"] == guessed[0]["id"])["can_confirm"]
+    assert not any(v["can_confirm"] for v in s.view()["items"] if v["state"] == "conflict")
+    js = (Path(__file__).resolve().parent.parent / "elicitagent" / "web" / "app.js").read_text()
+    assert "it.can_confirm ?" in js
