@@ -180,7 +180,8 @@ def test_typed_intent_is_the_first_goal_item_with_the_person_as_source(session):
     assert line["way"] == "said by the person" and line["source_document"] == "the person"
     assert line["source_passage"] == intent and line["value"] == intent
     goal = session.finish().read_text().split("## Goal and deliverable")[1].split("## ")[0]
-    assert goal.strip().splitlines()[0] == f"- **What the agent should do**: {intent} _(must hold; confirmed by the person)_"
+    # display order puts assumed items before confirmed ones, so the intent is in the section, not necessarily first
+    assert f"- **What the agent should do**: {intent} _(must hold; confirmed by the person)_" in goal.strip().splitlines()
 
 
 def test_empty_box_works_out_the_goal_from_the_folder(tmp_path):

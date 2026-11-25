@@ -295,3 +295,15 @@ label.ph { display: block; cursor: text; }
 .rv-answer .typed { margin-top: 6px; }
 .rv-tag { margin-left: 6px; vertical-align: 1px; }
 .rv-answer .typed .b { height: 38px; padding-top: 0; padding-bottom: 0; }
+
+/* the "Still open" block: at the top of the brief in progress and of the end screen */
+.still-open { border: 1px solid var(--open); background: color-mix(in srgb, var(--open-soft) 60%, var(--surface)); border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; }
+.so-h { display: flex; align-items: center; gap: 8px; font-size: 11.5px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--open-text); margin-bottom: 6px; }
+.so-h .cnt { letter-spacing: 0; }
+.still-open .small { margin: 0; }
+.so-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; }
+.so-list li { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: baseline; gap: 0 8px; font-size: 13px; }
+.so-list li .chip { align-self: start; }
+.so-list a { color: var(--text); font-weight: 650; }
+.so-where { font-size: 11.5px; color: var(--muted); }
+.entry.flash { box-shadow: 0 0 0 3px var(--open-soft), 0 0 0 4.5px var(--open); }

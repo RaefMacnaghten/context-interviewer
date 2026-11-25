@@ -521,6 +521,7 @@ function renderEndScreen(pane) {
   pane.append(
     el("div", { class: "ph" }, el("span", { class: "glyph", "aria-hidden": "true" }, "◉"), "Review before the brief is written"),
     el("div", { class: "pb" }, ...[
+      stillOpenBlock(),
       el("p", {}, `No more questions. Asked ${view.question_count}. Check the brief on the right once: confirm, edit or reject anything. Then write it.`),
       section("Waiting", "Not settled. Answer any you can here; the brief passes the rest to the agent as \"ask before you do this\".", waiting, null, reviewAnswer),
       section("Guessed and marked", "The tool guessed these. Confirm or edit any you can.", assumed, "assumed"),
@@ -537,7 +538,9 @@ function renderEndScreen(pane) {
 // A very small Markdown view for the brief: headings, lists, bold, italics, quotes. Text is escaped first.
 function briefHtml(md) {
   const esc = (t) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  const inline = (t) => esc(t).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|\s)_(.+?)_(?=\s|$|[.,;])/g, "$1<em>$2</em>");
+  const slug = (t) => t.toLowerCase().replace(/[^a-z0-9 -]/g, "").trim().replace(/ /g, "-");
+  const inline = (t) => esc(t).replace(/\[([^\]]+)\]\(#([a-z0-9-]+)\)/g, '<a href="#$2" data-brief-link="$2">$1</a>')
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>").replace(/(^|\s)_(.+?)_(?=\s|$|[.,;])/g, "$1<em>$2</em>");
   const out = [];
   let inList = false;
   for (const line of md.split("\n")) {
@@ -545,7 +548,7 @@ function briefHtml(md) {
     if (li) { if (!inList) { out.push("<ul>"); inList = true; } out.push(`<li>${inline(li[1])}</li>`); continue; }
     if (inList) { out.push("</ul>"); inList = false; }
     if (line.startsWith("# ")) out.push(`<h2>${inline(line.slice(2))}</h2>`);
-    else if (line.startsWith("## ")) out.push(`<h3>${inline(line.slice(3))}</h3>`);
+    else if (line.startsWith("## ")) out.push(`<h3 id="brief-${slug(line.slice(3))}">${inline(line.slice(3))}</h3>`);
     else if (line.startsWith("> ")) out.push(`<blockquote>${inline(line.slice(2))}</blockquote>`);
     else if (line.trim()) out.push(`<p>${inline(line)}</p>`);
   }
@@ -646,6 +649,35 @@ function renderQuestion() {
   }
 }
 
+// Display only: the "Still open" block at the top of the brief in progress and of the end screen. Each line links to
+// the item's row under its heading. It is rebuilt on every render, so it changes as items are settled.
+function goToItem(id) {
+  const row = document.getElementById(`item-${id}`);
+  if (row) {
+    row.scrollIntoView({ block: "center", behavior: "smooth" });
+    row.classList.add("flash");
+    setTimeout(() => row.classList.remove("flash"), 1200);
+  }
+}
+
+function stillOpenBlock() {
+  const list = view.still_open;
+  const box = el("section", { class: "still-open", "aria-label": "Still open" },
+    el("div", { class: "so-h" }, "Still open", list && list.length ? el("span", { class: "cnt" }, String(list.length)) : null));
+  if (!list) {
+    box.append(el("p", { class: "small" }, "Worked out when reading is finished."));
+  } else if (!list.length) {
+    box.append(el("p", { class: "small" }, "Nothing is still open: every item is settled."));
+  } else {
+    box.append(el("ul", { class: "so-list" }, list.map((it) => el("li", {},
+      stateChip(it.state),
+      el("div", {},
+        el("a", { href: `#item-${it.id}`, onclick: (ev) => { ev.preventDefault(); goToItem(it.id); } }, it.label),
+        el("div", { class: "so-where" }, `${it.heading} · ${it.must_hold_or_nice}`))))));
+  }
+  return box;
+}
+
 function renderItems() {
   const pane = $("#items-pane");
   const currentId = view.question && !view.finished ? view.question.item : null;
@@ -659,6 +691,7 @@ function renderItems() {
   ].filter(Boolean));
   const body = el("div", { class: "pb" });
   pane.append(body);
+  body.append(stillOpenBlock());
   if (!reading) body.append(el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => stateChip(s, `${counts[s]} ${s}`))));
   if (!view.intent && !reading) body.append(el("p", { class: "callout quiet doc-request" }, "You did not say what you want the agent to do, so the goal comes from the folder."));
   for (const heading of view.headings) {
@@ -709,6 +742,14 @@ function renderBrief() {
   if (!view.brief) return;
   const body = el("div", { class: "brief-view doc" });
   body.innerHTML = briefHtml(view.brief); // escaped in briefHtml
+  // links in the brief go to a heading in the brief, without touching the page's own address (it holds the session)
+  body.addEventListener("click", (ev) => {
+    const a = ev.target.closest("a[data-brief-link]");
+    if (!a) return;
+    ev.preventDefault();
+    const h = document.getElementById(`brief-${a.dataset.briefLink}`);
+    if (h) h.scrollIntoView({ block: "start", behavior: "smooth" });
+  });
   pane.replaceChildren(body);
 }
 

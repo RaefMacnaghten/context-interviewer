@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import re
 import time
 from typing import TYPE_CHECKING
 
@@ -40,7 +41,18 @@ def _source_note(it: "Item") -> str:
     return "open"
 
 
+def anchor(heading: str) -> str:
+    """The link target of a heading, as Markdown viewers such as GitHub make it: "What the agent may do" is
+    #what-the-agent-may-do."""
+    return re.sub(r"[^a-z0-9 -]", "", heading.lower()).strip().replace(" ", "-")
+
+
+STATE_WORDS = {"open": "open", "conflict": "conflict", "not available here": "not available here"}
+
+
 def write_brief(session: "Session") -> str:
+    from .session import UNSETTLED, display_order, still_open
+
     items = [it for it in session.items if not it.rejected]
     rejected = [it for it in session.items if it.rejected]
     lines: list[str] = []
@@ -61,6 +73,21 @@ def write_brief(session: "Session") -> str:
             "> SIMULATED MODEL. The items and estimates in this run came from a scripted stand-in, not a language model. "
             "Use it to see how the tool works, not as a real result."
         )
+    lines.append("")
+
+    # Display only: everything not yet settled, at the very top, each pointing to its line under its heading.
+    unsettled = still_open(items)
+    lines.append("## Still open")
+    lines.append("")
+    lines.append("Every item not yet settled, and where it sits in this brief. The two sections after this say what "
+                 "to do about each: ask the person first, or find out from someone else.")
+    lines.append("")
+    if unsettled:
+        for it in unsettled:
+            lines.append(f"- **{it.label}** ({STATE_WORDS[it.state]}, {it.must_hold_or_nice}): under "
+                         f"[{it.heading}](#{anchor(it.heading)})")
+    else:
+        lines.append("- Nothing is still open: every item is settled.")
     lines.append("")
 
     ask_first = [it for it in items if it.state in ("open", "conflict")]
@@ -93,13 +120,19 @@ def write_brief(session: "Session") -> str:
     lines.append("")
 
     for heading in ALL_HEADINGS:
-        under = [it for it in items if it.heading == heading and it.state in ("confirmed", "assumed")]
+        # unsettled first, then assumed, then confirmed (display only)
+        under = display_order([it for it in items if it.heading == heading
+                               and it.state in ("confirmed", "assumed") + UNSETTLED])
         if not under:
             continue
         lines.append(f"## {heading}")
         lines.append("")
         for it in under:
-            lines.append(f"- **{it.label}**: {it.value} _({it.must_hold_or_nice}; {_source_note(it)})_")
+            if it.state in UNSETTLED:
+                shown = "still open" if not (it.state == "conflict" and it.sources) else _sides(it)
+                lines.append(f"- **{it.label}**: {shown} _({it.must_hold_or_nice}; {_source_note(it)})_")
+            else:
+                lines.append(f"- **{it.label}**: {it.value} _({it.must_hold_or_nice}; {_source_note(it)})_")
         lines.append("")
     if rejected:
         lines.append("## Removed by the person")

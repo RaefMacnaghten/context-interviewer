@@ -164,6 +164,31 @@ def _whole(limit) -> int:
     return int(n)
 
 
+# Display only: what is not yet settled comes first, so the person and the agent see it at once.
+UNSETTLED = ("open", "conflict", NOT_AVAILABLE)
+
+
+def settle_rank(it: "Item") -> int:
+    """Order inside a heading: unsettled (open, waiting, conflict, not available here), then assumed, then
+    confirmed; rejected items last. Sorting by this is stable, so the existing order holds within each group."""
+    if it.rejected:
+        return 3
+    if it.state in UNSETTLED:
+        return 0
+    return {"assumed": 1, "confirmed": 2}.get(it.state, 0)
+
+
+def display_order(items: list["Item"]) -> list["Item"]:
+    return sorted(items, key=settle_rank)
+
+
+def still_open(items: list["Item"]) -> list["Item"]:
+    """Every item not yet settled, heading by heading in the order of the headings, then in display order."""
+    order = {h: n for n, h in enumerate(ALL_HEADINGS)}
+    live = [it for it in display_order(items) if not it.rejected and it.state in UNSETTLED]
+    return sorted(live, key=lambda it: order.get(it.heading, len(order)))
+
+
 class Session:
     def __init__(
         self,
@@ -818,6 +843,8 @@ class Session:
         ready = self.status == "ready"
         q = self.current_question() if ready else None
         shown = self.items or list(self._partial)
+        if ready:
+            shown = display_order(shown)
         return {
             "id": self.id,
             "status": self.status,
@@ -836,6 +863,10 @@ class Session:
             "skipped": [asdict(s) for s in self.folder.skipped] if self.folder else [],
             "headings": ALL_HEADINGS,
             "items": [self.item_view(it) for it in shown],
+            # the "Still open" block at the top of the brief in progress and of the end screen; None while reading
+            "still_open": [{"id": it.id, "label": it.label, "heading": it.heading, "state": it.state,
+                            "must_hold_or_nice": it.must_hold_or_nice} for it in still_open(self.items)]
+            if ready else None,
             "question": None
             if q is None
             else {"item": q.id, "text": self.question_text(q), "kind": q.kind, "cost": q.cost, "reason": q.reason,
