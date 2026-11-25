@@ -478,16 +478,15 @@ function render() {
 // P7 and P8: at the limit, say how much more seems needed, and let the person continue or stop.
 function renderLimit(pane) {
   const need = view.at_limit;
-  const plural = need.questions === 1 ? "question" : "questions";
   pane.className = "panel q-pane warn";
   pane.append(
     el("div", { class: "ph" }, el("span", { class: "glyph", "aria-hidden": "true" }, "◷"), "You have reached your question limit"),
     el("div", { class: "pb" },
       el("p", { class: "lead" }, `Your limit is ${view.limit} ${view.limit === 1 ? "question" : "questions"}, and ${view.question_count} ${view.question_count === 1 ? "has" : "have"} been asked. ` +
-        `I think I need at least ${need.questions} more ${plural}.`),
-      el("p", { class: "callout warn" }, "This is a lower bound: an answer can reveal a new gap. The most important questions came first."),
+        need.message),
+      el("p", { class: "callout warn" }, "The most important questions came first."),
       el("div", { class: "brow" },
-        el("button", { class: "b pr", onclick: () => limitChoice("continue") }, `Continue (${config.limit_start} more questions)`),
+        el("button", { class: "b pr", onclick: () => limitChoice("continue") }, need.button),
         el("button", { class: "b", onclick: () => limitChoice("stop") }, "Stop here")),
       el("p", { class: "small" }, "If you stop: anything that cannot be undone, any fact about a named person, anything with nothing to guess from and any clash is left open for the agent to ask; the rest is guessed and marked assumed.")),
   );

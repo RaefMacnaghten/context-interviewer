@@ -586,6 +586,20 @@ class Session:
         q = self.queue()
         return {"questions": len(q), "cost": sum(it.cost for it in q)}
 
+    def limit_wording(self) -> dict:
+        """What the limit screen says. Two numbers that mean different things, each saying what it is: how many
+        more questions the tool wants (a lower bound), and how many more pressing Continue allows."""
+        need = self.still_needed()
+        grant = self.table.limit_start
+        words = lambda n: f"{n} more {'question' if n == 1 else 'questions'}"
+        return {
+            **need,
+            "grant": grant,
+            "message": f"I want to ask at least {words(need['questions'])}. That is a lower bound: an answer can "
+                       f"reveal a new gap.",
+            "button": f"Allow up to {words(grant)}",
+        }
+
     def current_question(self) -> Item | None:
         if self.stopped or self.at_limit():
             return None
@@ -882,7 +896,7 @@ class Session:
             "running_cost": self.running_cost,
             "limit_reached": self.limit_reached,
             "limit": self.limit,
-            "at_limit": self.still_needed() if (ready and self.at_limit() and not self.stopped) else None,
+            "at_limit": self.limit_wording() if (ready and self.at_limit() and not self.stopped) else None,
             "stopped": self.stopped,
             "finished": self.finished,
             "brief": self.brief_text,

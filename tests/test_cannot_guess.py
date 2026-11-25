@@ -385,3 +385,31 @@ def test_nothing_changes_after_the_brief_is_written(tmp_path):
                  lambda: s.answer_on_review("r1", "green")):
         with pytest.raises(ValueError):
             call()
+
+
+# ---------------------------------------------------------------- the limit screen's two numbers
+
+
+def test_the_limit_screen_says_what_each_number_is(tmp_path):
+    s = fete(tmp_path, limit=8)
+    run_to_the_end(s)
+    shown = s.view()["at_limit"]
+    # what the tool wants: one more question, a lower bound, and it says so
+    assert shown["questions"] == 1 and shown["message"] == (
+        "I want to ask at least 1 more question. That is a lower bound: an answer can reveal a new gap.")
+    # what the button allows: another round of the starting limit, said plainly
+    assert shown["grant"] == 8 and shown["button"] == "Allow up to 8 more questions"
+    s.limit_choice("continue")
+    assert s.limit == 16  # pressing it allows exactly what it said
+
+
+def test_the_limit_screen_numbers_follow_the_queue_and_the_ask_table(tmp_path):
+    s = fete(tmp_path, limit=5)
+    run_to_the_end(s)
+    shown = s.view()["at_limit"]
+    assert shown["questions"] == len(s.queue()) == 4
+    assert "at least 4 more questions" in shown["message"]
+    table = AskTable({**AskTable.load().data, "limit": {"start": 1, "unit": "questions"}})
+    t = fete(tmp_path / "one", table=table, limit=5)
+    run_to_the_end(t)
+    assert t.view()["at_limit"]["button"] == "Allow up to 1 more question"
