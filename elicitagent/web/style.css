@@ -176,6 +176,8 @@ label.ph { display: block; cursor: text; }
 .q-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; font-size: 12.5px; }
 .q-num { font-weight: 700; color: var(--muted); }
 .revisit-note { margin: 0 0 10px; }
+.q-detail { font-size: 14px; line-height: 1.5; margin: -2px 0 10px; color: var(--text); }
+.q-detail .q-form { font-weight: 650; }
 .reply-now { font-size: 13px; font-weight: 650; margin: 6px 0 10px; }
 .opt.chosen { border-color: var(--accent); }
 .qq { font-size: 17px; font-weight: 750; line-height: 1.3; letter-spacing: -.01em; margin: 0 0 8px; }

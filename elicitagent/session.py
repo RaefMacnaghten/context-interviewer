@@ -739,10 +739,14 @@ class Session:
         """The question as the person reads it, in three parts: what is needed (the model's wording, or a plain
         template), why it is asked (what the files say or lack, built here from the passages, never by the model),
         and what form of answer is wanted."""
+        parts = self.question_parts(it)
+        return " ".join(part for part in (parts["ask"], parts["why"], parts["form"]) if part)
+
+    def question_parts(self, it: Item) -> dict:
+        """The three parts of the question, for the page to set out: the question, why, and what to answer."""
         w = it.wording or {}
-        ask = _sentence(w.get("question") or self._template_question(it), "?")
-        form = _sentence(w.get("answer_form") or self._template_form(it), ".")
-        return " ".join(part for part in (ask, self.why_asked(it), form) if part)
+        return {"ask": _sentence(w.get("question") or self._template_question(it), "?"), "why": self.why_asked(it),
+                "form": _sentence(w.get("answer_form") or self._template_form(it), ".")}
 
     def _template_question(self, it: Item) -> str:
         if it.kind == "confirm":
@@ -847,7 +851,8 @@ class Session:
         out = []
         for n, item_id in enumerate(self.asked_order, start=1):
             it = self.get(item_id)
-            out.append({"number": n, "item": it.id, "label": it.label, "text": self.question_text(it), "kind": it.kind,
+            out.append({"number": n, "item": it.id, "label": it.label, "text": self.question_text(it),
+                        "parts": self.question_parts(it), "kind": it.kind,
                         "reply": it.reply_action, "value": it.value if it.reply_action == "answer" else None,
                         "who": it.who_could, "candidates": it.candidates, "sources": it.sources,
                         "confirm_value": (it.before_reply or {}).get("value") or (it.candidates[0] if len(it.candidates) == 1 else None),
@@ -1070,7 +1075,7 @@ class Session:
             if ready else None,
             "question": None
             if q is None
-            else {"item": q.id, "text": self.question_text(q), "kind": q.kind, "cost": q.cost, "reason": q.reason,
+            else {"item": q.id, "text": self.question_text(q), "parts": self.question_parts(q), "kind": q.kind, "cost": q.cost, "reason": q.reason,
                   "candidates": q.candidates, "value": self.confirm_value(q) if q.kind == "confirm" else q.value,
                   "sources": q.sources},
             "questions_left": 0 if (self.stopped or not ready) else len(self.queue()),

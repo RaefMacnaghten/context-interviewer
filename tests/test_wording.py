@@ -108,3 +108,10 @@ def test_the_real_model_wording_call_is_read_and_filtered(monkeypatch):
     assert got == {"i1": {"question": "When can Kit work?", "answer_form": "Give times."}}
     assert "Do not say why" in seen["system"] and "Kit's availability" in seen["user"]
     assert model.word_questions("", Folder(), []) == {}
+
+
+def test_the_page_gets_the_three_parts_to_set_out(tmp_path):
+    s = run(copy_rota(tmp_path), tmp_path)
+    q = s.view()["question"]
+    assert set(q["parts"]) == {"ask", "why", "form"} and q["parts"]["ask"].endswith("?")
+    assert q["text"] == " ".join(p for p in (q["parts"]["ask"], q["parts"]["why"], q["parts"]["form"]) if p)

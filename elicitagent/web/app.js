@@ -725,7 +725,7 @@ function renderQuestion() {
       backButton(),
       el("button", { class: `b sm why-toggle ${whyOpen ? "on" : ""}`, "aria-expanded": whyOpen ? "true" : "false", onclick: () => { whyOpen = !whyOpen; render(); } },
         whyOpen ? "Hide why" : "Why this question?")),
-    el("p", { class: "question-text qq" }, q.text),
+    ...questionLines(q),
     el("p", { class: "reason q-why" }, q.reason),
     item ? sourceView(`q-${item.id}`, item.document, item.passage, item.context) : null,
     clash,
@@ -745,6 +745,14 @@ function renderQuestion() {
 }
 
 // ---------------------------------------------------------------- Back: an earlier question, its reply changeable
+
+// The question as three parts: the question itself, large; then why it is asked and what to answer, smaller.
+function questionLines(q) {
+  const p = q.parts || { ask: q.text, why: "", form: "" };
+  return [el("p", { class: "question-text qq" }, p.ask),
+    p.why || p.form ? el("p", { class: "q-detail" }, el("span", { class: "q-why-files" }, p.why), " ", el("span", { class: "q-form" }, p.form)) : null]
+    .filter(Boolean);
+}
 
 function backButton() {
   if (!view.asked || !view.asked.length) return null;
@@ -793,7 +801,7 @@ function renderRevisit(pane, a) {
       a.number > 1 ? el("button", { class: "b sm", onclick: () => { backAt -= 1; render(); } }, "← Earlier") : null,
       a.number < n ? el("button", { class: "b sm", onclick: () => { backAt += 1; render(); } }, "Later →") : null),
     el("p", { class: "callout quiet revisit-note" }, "You are looking back. Change the reply if you want to: it replaces the one you gave and does not count as a new question."),
-    el("p", { class: "question-text qq" }, a.text),
+    ...questionLines(a),
     el("p", { class: "reason q-why" }, a.reason),
     el("p", { class: "reply-now" }, replyWords(a)),
     opts.childNodes.length ? opts : null,
