@@ -174,7 +174,7 @@ For each item give:
 - label: what the agent needs to know, as a short neutral noun phrase of at most ten words. Do not put the value or your reasoning in the label.
 - value: the best current value, or null if nothing suggests one.
 - candidates: the distinct values that are plausible (empty if none). Include the value itself.
-- stated: true only when a document states the value directly; false when you inferred it or it is missing.
+- stated: true only when a document states the value directly; false when you inferred it or it is missing. A line that only defers to the person, such as "ask me" or "tbc", is not a stated value: give value null and stated false, with that document and passage.
 - must_hold: true for a hard fact or rule the agent must respect; false for a preference that is nice if possible.
 - document: the file name the value came from, exactly as given, or null.
 - passage: the exact text copied character for character from that document that supports the value, or null. Never paraphrase a passage. If two documents disagree, list one item per document, each with its own document's value and passage.
@@ -189,7 +189,7 @@ SECOND_LOOK_SYSTEM = """You help a person hand a task to an AI agent. An earlier
 
 For each item return:
 - id: the item's id.
-- found: true only if a document in the folder states the value directly. Inferring or guessing does not count.
+- found: true only if a document in the folder states the value directly. Inferring or guessing does not count, and nor does a line that only defers to the person, such as "ask me" or "tbc".
 - value: the value as the document states it, or null.
 - document: the file name exactly as given, or null.
 - passage: the exact text copied character for character from that document that states the value, or null. Never paraphrase a passage."""

@@ -13,6 +13,7 @@ from pathlib import Path
 from . import ALL_HEADINGS, OTHER
 from .asktable import AskTable, Gap
 from .brief import write_brief
+from .defers import only_defers
 from .documents import Folder, passage_context, passage_found, read_folder
 from .models import Model
 from .trace import GapTrace
@@ -370,6 +371,11 @@ class Session:
             for it in missing:
                 it.state = "open"
                 hit = found.get(it.id)
+                if hit and only_defers(hit.get("value")) and not it.passage_found:
+                    # the second look found only a line that defers to the person: keep it as the question's context
+                    doc = self.folder.get(hit.get("document") or "") if self.folder else None
+                    if passage_found(doc, hit.get("passage")):
+                        it.document, it.passage, it.passage_found = hit["document"], hit["passage"], True
                 if hit and self._verified(hit):
                     it.value = hit["value"]
                     if it.value not in it.candidates:
@@ -471,7 +477,8 @@ class Session:
 
     def _verified(self, hit: dict) -> bool:
         doc = self.folder.get(hit.get("document") or "") if self.folder else None
-        return passage_found(doc, hit.get("passage")) and value_supported(hit.get("value"), hit.get("passage"))
+        return (not only_defers(hit.get("value")) and passage_found(doc, hit.get("passage"))
+                and value_supported(hit.get("value"), hit.get("passage")))
 
     def _normalise(self, raw: dict, index: int) -> Item:
         heading = raw.get("heading") if raw.get("heading") in ALL_HEADINGS else OTHER
@@ -480,7 +487,11 @@ class Session:
         doc = self.folder.get(document) if (self.folder and document) else None
         found = passage_found(doc, passage)
         value = raw.get("value")
-        candidates = [c for c in (raw.get("candidates") or []) if c]
+        # A value that only defers to the person ("ask me") is not an answer: the item is a gap, and the document
+        # and passage stay as the context shown with the question.
+        if only_defers(value):
+            value = None
+        candidates = [c for c in (raw.get("candidates") or []) if c and not only_defers(c)]
         if value and value not in candidates:
             candidates.insert(0, value)
         return Item(
