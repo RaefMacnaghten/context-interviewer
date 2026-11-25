@@ -10,6 +10,13 @@ def table():
     return AskTable.load()
 
 
+@pytest.fixture(scope="module")
+def arithmetic(table):
+    """The rule's arithmetic on its own: the ask table with the cannot-guess setting off, so every gap is decided by
+    the rule. With the setting on, a gap the tool cannot guess is asked whatever the arithmetic says."""
+    return AskTable({**table.data, "cannot_guess": {**table.data["cannot_guess"], "ask_while_questions_remain": False}})
+
+
 # ------------------------------------------------------------------ the file itself
 
 
@@ -78,16 +85,18 @@ def test_question_kinds(table, candidates, named, conflict, kind, cost):
 @pytest.mark.parametrize("k", [0.25, 0.5, 1, 2, 4])
 @pytest.mark.parametrize("band, can_undo, would_notice", [("low", True, True), ("medium", True, False), ("high", False, False)])
 @pytest.mark.parametrize("kind, candidates", [("confirm", 1), ("choose", 3), ("open", 0)])
-def test_cost_weighted_boundary(table, k, band, can_undo, would_notice, kind, candidates):
-    harm = table.harm[band]
-    cost = table.cost[kind]
+def test_cost_weighted_boundary(arithmetic, table, k, band, can_undo, would_notice, kind, candidates):
+    harm = arithmetic.harm[band]
+    cost = arithmetic.cost[kind]
     p_edge = k * cost / harm  # ask exactly when p x harm >= k x cost
     if p_edge <= 1:
-        at = table.decide(Gap(p_edge, can_undo, would_notice, candidates=candidates), "cost-weighted", k)
+        at = arithmetic.decide(Gap(p_edge, can_undo, would_notice, candidates=candidates), "cost-weighted", k)
         assert at.asks, (k, band, kind)
     if p_edge - 0.01 >= 0:
-        below = table.decide(Gap(p_edge - 0.01, can_undo, would_notice, candidates=candidates), "cost-weighted", k)
-        assert not below.asks, (k, band, kind)
+        gap = Gap(p_edge - 0.01, can_undo, would_notice, candidates=candidates)
+        assert not arithmetic.decide(gap, "cost-weighted", k).asks, (k, band, kind)
+        # with the setting on, only a gap the tool could guess is decided by the arithmetic
+        assert table.decide(gap, "cost-weighted", k).asks == (not can_undo)
 
 
 # ------------------------------------------------------------------ P2 confidence-only rule at the five settings
@@ -125,15 +134,16 @@ def test_p3_low_harm_asked_only_as_confirm_and_only_when_at_least_as_likely_wron
     assert not table.decide(Gap(0.99, True, True, candidates=0), "cost-weighted", 1).asks
 
 
-def test_p3_named_person_never_guessed(table):
-    # low harm, open question too dear: not asked, and left open rather than guessed
+def test_p3_named_person_never_guessed(table, arithmetic):
+    # low harm, open question too dear for the arithmetic: asked all the same, since it cannot be guessed
     d = table.decide(Gap(0.6, True, True, candidates=0, named_person=True), "cost-weighted", 1)
-    assert not d.asks
-    assert d.way == "wait"
-    assert d.kind == "open"
+    assert d.way == "ask" and d.kind == "open" and d.cannot_guess
+    assert d.reason.startswith("Asked: a personal fact about a named person is never guessed, and questions remain.")
     # the same under the confidence-only rule
-    d2 = table.decide(Gap(0.2, True, True, candidates=1, named_person=True), "confidence-only", 0.3)
-    assert d2.way == "wait"
+    assert table.decide(Gap(0.2, True, True, candidates=1, named_person=True), "confidence-only", 0.3).way == "ask"
+    # on the arithmetic alone it is left open rather than guessed
+    assert arithmetic.decide(Gap(0.6, True, True, candidates=0, named_person=True), "cost-weighted", 1).way == "wait"
+    assert arithmetic.decide(Gap(0.2, True, True, candidates=1, named_person=True), "confidence-only", 0.3).way == "wait"
 
 
 @pytest.mark.parametrize("candidates, kind", [(1, "confirm"), (2, "choose"), (4, "choose"), (0, "open"), (5, "open")])
@@ -144,11 +154,11 @@ def test_named_person_asked_by_what_the_files_hold(table, candidates, kind):
 
 @pytest.mark.parametrize("candidates", [0, 1, 2, 4, 5])
 @pytest.mark.parametrize("rule", ["cost-weighted", "confidence-only", "model-decides", "always-ask", "never-ask"])
-@pytest.mark.parametrize("must_hold", [True, False])
-def test_named_person_is_never_guessed(table, candidates, rule, must_hold):
+def test_named_person_is_never_guessed(table, arithmetic, candidates, rule):
     for p in (0.01, 0.5, 0.99):
-        gap = Gap(p, True, True, candidates=candidates, named_person=True, must_hold=must_hold, model_would_ask=False)
-        assert table.decide(gap, rule).way != "guess and mark it"
+        gap = Gap(p, True, True, candidates=candidates, named_person=True, model_would_ask=False)
+        assert table.decide(gap, rule).way == ("wait" if rule == "never-ask" else "ask")
+        assert arithmetic.decide(gap, rule).way != "guess and mark it"
 
 
 def test_old_always_open_is_a_setting(table):
@@ -159,13 +169,17 @@ def test_old_always_open_is_a_setting(table):
 # ------------------------------------------------------------------ P4 when it waits
 
 
-def test_p4_cannot_be_undone_waits_under_cost_weighted(table):
-    # high band, not asked
-    high = table.decide(Gap(0.05, False, False, candidates=1), "cost-weighted", 1)
-    assert not high.asks and high.way == "wait"
+def test_p4_cannot_be_undone_is_never_guessed_under_cost_weighted(table, arithmetic):
+    # high band: below the line, so the arithmetic alone holds it back; with the setting on it is asked
+    gap = Gap(0.05, False, False, candidates=1)
+    assert arithmetic.decide(gap, "cost-weighted", 1).way == "wait"
+    d = table.decide(gap, "cost-weighted", 1)
+    assert d.way == "ask" and d.reason == "Asked: a wrong guess could not be undone, and questions remain."
     # medium band: would be noticed but cannot be undone
-    med = table.decide(Gap(0.1, False, True, candidates=1), "cost-weighted", 1)
+    gap = Gap(0.1, False, True, candidates=1)
+    med = arithmetic.decide(gap, "cost-weighted", 1)
     assert med.harm_band == "medium" and not med.asks and med.way == "wait"
+    assert table.decide(gap, "cost-weighted", 1).way == "ask"
 
 
 def test_p4_can_be_undone_is_guessed(table):
@@ -197,9 +211,10 @@ def test_the_ask_table_has_exactly_three_outcomes(table, rule):
     assert seen <= set(OUTCOMES)
 
 
-def test_nothing_to_guess_is_left_open(table):
-    d = table.decide(Gap(0.3, True, True, candidates=0, has_value=False), "cost-weighted", 1)
-    assert d.way == "wait"
+def test_nothing_to_guess_from_is_asked_and_never_guessed(table, arithmetic):
+    gap = Gap(0.3, True, True, candidates=0, has_value=False)
+    assert table.decide(gap, "cost-weighted", 1).way == "ask"
+    assert arithmetic.decide(gap, "cost-weighted", 1).way == "wait"  # before: left open, as if leaving it cost nothing
 
 
 def test_value_order_is_chance_times_harm_over_cost(table):

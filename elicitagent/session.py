@@ -69,6 +69,7 @@ class Item:
     source: str = ""  # "file", "person", "guess" or ""
     asked: bool = False
     answered_on_review: bool = False  # answered by the person on the end screen, not asked as a question
+    cannot_guess: bool = False  # the tool may not or cannot guess it, so it is asked while questions remain
     pending: bool = False  # waiting in the question queue
     who_could: str | None = None
     # a clash (P11): the documents that disagree, each with its value and passage
@@ -531,13 +532,13 @@ class Session:
             conflict=it.state == "conflict",
             model_would_ask=it.model_would_ask,
             has_value=bool(it.value),
-            must_hold=it.must_hold,
         )
 
     def _decide(self, it: Item) -> None:
         d = self.table.decide(self._gap(it), self.rule, self.threshold)
         it.way, it.kind, it.cost = d.way, d.kind, d.cost
         it.harm_band, it.harm, it.reason, it.value_order = d.harm_band, d.harm, d.reason, d.value
+        it.cannot_guess = d.cannot_guess
         conflict = it.state == "conflict"
         disagree = disagreement(it)
         if conflict:
@@ -568,9 +569,13 @@ class Session:
     # ------------------------------------------------------------ questions
 
     def queue(self) -> list[Item]:
-        """Questions still to ask, most valuable first (P6): (chance wrong x harm) / cost, largest first."""
+        """Questions still to ask, in one queue, most valuable first (P6): (chance wrong x harm) / cost, largest
+        first. The clash with the person's intent comes first of all. Among the gaps the tool cannot guess, those
+        that are only nice if possible come after everything else (the ask table's must_hold_first setting)."""
         waiting = [it for it in self.items if it.pending and not it.rejected]
-        return sorted(waiting, key=lambda it: (not it.ask_first, -it.value_order))
+        nice_last = bool(self.table.cannot_guess.get("must_hold_first", True))
+        return sorted(waiting, key=lambda it: (not it.ask_first, nice_last and it.cannot_guess and not it.must_hold,
+                                               -it.value_order))
 
     def at_limit(self) -> bool:
         q = self.queue()

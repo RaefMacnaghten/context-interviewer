@@ -34,7 +34,6 @@ class Gap:
     conflict: bool = False
     model_would_ask: bool | None = None
     has_value: bool = True  # False when there is nothing to guess from
-    must_hold: bool = False
 
 
 @dataclass(frozen=True)
@@ -49,6 +48,7 @@ class Decision:
     threshold: float | None
     reason: str
     value: float  # (chance wrong x harm) / cost, for ordering questions (P6)
+    cannot_guess: bool = False  # the tool may not or cannot guess it: asked while questions remain
 
 
 class AskTable:
@@ -60,7 +60,7 @@ class AskTable:
         self.kinds = data["kinds"]
         self.rules = data["rules"]
         self.named_person = data["named_person"]
-        self.must_hold = data.get("must_hold", {})
+        self.cannot_guess = data.get("cannot_guess", {})
         self.limit_start = data["limit"]["start"]
 
     @classmethod
@@ -93,13 +93,25 @@ class AskTable:
     @staticmethod
     def named_person_note(kind: str) -> str:
         if kind == "confirm":
-            return " a file holds a value, so you confirm it."
+            return "A file holds a value, so you confirm it."
         if kind == "choose":
-            return " the files hold more than one value, so you choose."
-        return " no value for it is documented, so it is an open question."
+            return "The files hold more than one value, so you choose."
+        return "No value for it is documented, so it is an open question."
 
-    def must_hold_applies(self, rule: str) -> bool:
-        return bool(self.must_hold.get("ask_when_not_guessed", False)) and rule in self.must_hold.get("rules", [])
+    def asks_what_cannot_be_guessed(self, rule: str) -> bool:
+        return bool(self.cannot_guess.get("ask_while_questions_remain", False)) and rule in self.cannot_guess.get("rules", [])
+
+    def why_cannot_guess(self, gap: Gap, rule: str) -> str | None:
+        """Why the tool may not or cannot guess this gap, or None when it could guess it."""
+        if gap.conflict:
+            return "the documents disagree, and a clash is never guessed"
+        if gap.named_person and self.named_person.get("never_guessed", True):
+            return "a personal fact about a named person is never guessed"
+        if not gap.can_undo and self.rules[rule].get("irreversible_waits", False):
+            return "a wrong guess could not be undone"
+        if not gap.has_value:
+            return "nothing to guess from"
+        return None
 
     def rule_names(self) -> list[str]:
         return list(self.rules.keys())
@@ -135,10 +147,19 @@ class AskTable:
         kind = self.question_kind(gap.candidates, gap.named_person, gap.conflict)
         cost = float(self.cost[kind])
         value = (p * harm) / cost if cost else 0.0
-        asks = self.rule_asks(rule, threshold, gap, harm, cost)
         pct = f"{round(p * 100)}%"
-        if asks:
-            way = "ask"
+        why = self.why_cannot_guess(gap, rule)
+        if why is not None and self.asks_what_cannot_be_guessed(rule):
+            # A gap the tool cannot guess. It is asked while questions remain under the limit, under every rule
+            # listed in the ask table; the rule's arithmetic does not decide it.
+            way, asks = "ask", True
+            reason = f"Asked: {why}, and questions remain."
+            if gap.named_person and not gap.conflict:
+                reason += " " + self.named_person_note(kind)
+        elif self.rule_asks(rule, threshold, gap, harm, cost):
+            # A gap the tool could guess (or, with the setting off or under a rule not listed, any gap): the rule
+            # decides.
+            way, asks = "ask", True
             if rule == "cost-weighted":
                 reason = f"Asked: a guess here is about {pct} likely to be wrong and the harm is {band}, which outweighs {'an' if kind == 'open' else 'a'} {kind} question."
             elif rule == "confidence-only":
@@ -148,25 +169,18 @@ class AskTable:
             else:
                 reason = "Asked: this rule asks every item."
             if gap.named_person:
-                reason += " It is a personal fact about a named person, so it is never guessed;" + self.named_person_note(kind)
-        elif gap.named_person and self.named_person.get("never_guessed", True):
-            way, why = "wait", "personal facts about a named person are never guessed"
-            reason = "Left open: personal facts about a named person are never guessed."
-        elif not gap.can_undo and self.rules[rule].get("irreversible_waits", False):
-            way, why = "wait", "a wrong guess here could not be undone"
-            reason = "Held back: a wrong guess here could not be undone, so it waits for you."
-        elif not gap.has_value:
-            way, why = "wait", "there is nothing to guess from"
-            reason = "Left open: there is nothing to guess from."
+                reason += " It is a personal fact about a named person, so it is never guessed. " + self.named_person_note(kind)
+        elif why is not None:
+            # never-ask, or the setting off: what cannot be guessed is left open
+            way, asks = "wait", False
+            reason = {
+                "a personal fact about a named person is never guessed": "Left open: personal facts about a named person are never guessed.",
+                "a wrong guess could not be undone": "Held back: a wrong guess here could not be undone, so it waits for you.",
+                "nothing to guess from": "Left open: there is nothing to guess from.",
+            }.get(why, f"Left open: {why}.")
         else:
-            way = "guess and mark it"
+            way, asks = "guess and mark it", False
             reason = f"Guessed and marked: about {pct} likely to be wrong with {band} harm, not worth {'an' if kind == 'open' else 'a'} {kind} question."
-        if way == "wait" and gap.must_hold and self.must_hold_applies(rule):
-            # plan change 1: what must hold and will not be guessed is asked now, not left for the agent
-            way, asks = "ask", True
-            reason = f"Asked: must hold and cannot be guessed ({why})."
-            if gap.named_person:
-                reason += " " + self.named_person_note(kind).strip().capitalize()
         return Decision(
             way=way,
             asks=asks,
@@ -178,4 +192,5 @@ class AskTable:
             threshold=threshold,
             reason=reason,
             value=value,
+            cannot_guess=why is not None,
         )

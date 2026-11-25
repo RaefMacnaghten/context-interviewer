@@ -51,14 +51,17 @@ choose_max_candidates = 4
 always_open = false
 never_guessed = true
 
-# Plan change 1 (24 Nov 2026). The must-hold branch: an item that must hold and that the
-# rule will not guess (it would wait, it has nothing to guess from, or it is a personal fact
-# about a named person) is asked now, most valuable first, within the limit. An item that is
-# only nice if possible may stay open. The branch applies to the rules listed here; never-ask
-# asks nothing, so it is not listed.
-[must_hold]
-ask_when_not_guessed = true
+# Plan change (25 Nov 2026), replacing the must-hold branch of 24 Nov. The decision is split:
+#  - a gap the tool could guess, and may guess: the rule below decides, ask or guess and mark it;
+#  - a gap the tool cannot guess (nothing to guess from, a wrong guess could not be undone, a
+#    personal fact about a named person, or a clash): it is asked while questions remain under
+#    the limit, must hold before nice if possible. What is left at the limit, what the person
+#    skips and what they cannot answer goes to the brief's lists.
+# The split applies to the rules listed here. Never-ask asks nothing, so it is not listed.
+[cannot_guess]
+ask_while_questions_remain = true
 rules = ["cost-weighted", "confidence-only", "model-decides", "always-ask"]
+must_hold_first = true
 
 # Plan change 2 (24 Nov 2026), replacing P9's person-facing wording. The question limit is a
 # number of questions and starts at 8. Question cost stays inside the rule, the gap trace and

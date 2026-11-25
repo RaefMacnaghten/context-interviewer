@@ -375,7 +375,7 @@ async function renderWhy(container, itemId) {
     el("dl", { class: "kv" }, rows.flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)])),
     working ? el("p", { class: "why-working" }, working) : null,
     data.clash && d.way === "ask" ? el("p", { class: "why-working" }, "A clash is always asked, whatever this arithmetic says: the plan settles a clash by a choose question that shows both sides.") : null,
-    !data.clash && (d.reason || "").startsWith("Asked: must hold") ? el("p", { class: "why-working" }, "This item must hold and the tool will not guess it, so it is asked whatever this arithmetic says.") : null,
+    !data.clash && /, and questions remain\./.test(d.reason || "") ? el("p", { class: "why-working" }, "The tool cannot guess this item, so it is asked while questions remain, whatever this arithmetic says. The arithmetic only decides items the tool could guess.") : null,
     el("p", { class: "why-reason" }, d.reason),
     el("p", { class: "small" }, `Order of value: (chance wrong x harm) / cost = ${num(d.chance_wrong * d.harm / d.question_cost)}. Higher comes first.`),
     el("p", { class: "small" }, "Taken from the gap trace. Nothing here can be changed."),

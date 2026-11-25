@@ -10,6 +10,8 @@ Entries 1 to 4, 12, 14 to 31 and the closing section were added on 24 Nov 2026 f
 
 Entries 32 to 34 were added on 24 Nov 2026, after the author's own real-model run on the rota task, from his message about that run and the AI's reading of the run's gap trace, which is labelled as the AI's reading.
 
+Entry 35 was added on 25 Nov 2026, from his message after his own runs; the figures in it are taken from the run traces and labelled so. It replaces entry 32, which is kept as the record and marked superseded.
+
 Entries 14 to 20 cover the nine design lines the AI set out on 18 Nov 2026, with its own table of what each line first said, what it became and why. Seven of the nine lines changed because of the author's challenges on 18 and 19 Nov 2026, one entry per line; the record does not give a finer date for each. Lines 7 and 9 changed as consequences or for naming, not from a challenge, so they have no entry. The closing section lists items the AI raised and the author confirmed.
 
 ## 1. The idea: an interview tool that works from a folder of materials
@@ -578,7 +580,7 @@ This found a missing step. The intent box was added.
 
 **Original / AI-assisted:** Original: the account, which is his. AI-assisted: nothing is recorded for this entry.
 
-## 32. Must-hold items are asked, not left open
+## 32. Must-hold items are asked, not left open (superseded by entry 35)
 
 **Date:** 24 Nov 2026
 
@@ -590,7 +592,7 @@ This found a missing step. The intent box was added.
 
 > Why is it not asking me any more questions? There are 6 more open items?
 
-He agreed the must-hold branch as proposed. This is a change to the approved plan.
+He agreed the must-hold branch as proposed. This is a change to the approved plan. On 25 Nov 2026 the branch was replaced by the rule in entry 35; this entry is kept as the record.
 
 **Why:** His question found that the tool left must-hold items for the agent to ask when he was there to answer them.
 
@@ -631,6 +633,26 @@ He agreed the change. It replaces "always open" in P5. Personal facts about a na
 **Why:** The AI's reason, which he agreed: confirming what a file already says about a person is cheaper for the person and shows them the source, while the fact is still never guessed.
 
 **Original / AI-assisted:** Original: the question that found the problem. AI-assisted: the change to the question kinds.
+
+## 35. A gap the tool cannot guess is asked while questions remain
+
+**Date:** 25 Nov 2026
+
+**Question:** Why the tool still left items open with questions to spare, and what it should do with a gap it cannot guess.
+
+**AI recommendation:** From the run traces, not his words: a run on the build with the must-hold branch (entry 32) asked 3 of the 8 questions the limit allowed and left 6 nice-if-possible items open. The AI's reading: the branch asked only what must hold, so a nice-if-possible gap with nothing to guess from was still left open, and leaving it open was priced at zero, although the brief hands it to the agent as "ask before you do this". The change, worded by the AI from his second sentence, splits the decision. A gap the tool could guess, and may guess, is decided by the rule as before. A gap with nothing to guess from, or one that may not be guessed (a wrong guess could not be undone, a personal fact about a named person, a clash), is asked while questions remain under the limit, sharing the one limit with the rule's own questions. Only what is left at the limit, what the person skips and what they cannot answer goes to the ask-first and not-available lists. It replaces the must-hold branch rather than adding to it. The order of the questions is the AI's proposal: one queue by value, with nice-if-possible gaps the tool cannot guess after all the others.
+
+**Author's decision:** The author's words, after his own runs:
+
+> i'm concerned about our ask rule It allowed for, in my first try, two questions to be answered or three questions to be answered out of the eight that I set, with six items open.
+
+> If the person has questions left, and the ask first list is non-zero, the person should be asked those questions until they hit the question cap and then presented with the list.
+
+This is a change to the approved plan. It replaces entry 32.
+
+**Why:** No reason was recorded beyond his two sentences.
+
+**Original / AI-assisted:** Original: finding the problem in his own runs, and the rule in his second sentence. AI-assisted: the figures read from the run traces, the split into gaps the tool could guess and gaps it cannot, and the order of the questions, which is a proposal for him to confirm.
 
 ## AI-raised, confirmed by the author
 
