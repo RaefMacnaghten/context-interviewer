@@ -10,8 +10,9 @@ import pytest
 
 from elicitagent.cli import main
 from elicitagent.documents import Folder
-from elicitagent.models import (E1_LIST, E1_TABLE_ROWS, EXPERIMENTS, AnthropicModel, ModelError, SimulatedModel,
-                                make_model)
+from elicitagent.models import (E1_LIST, E1_TABLE_ROWS, E2_ESTIMATE, E2_HINTS_ARE_GUESSES, E2_LIST, E2_SECOND_LOOK,
+                                EXPERIMENTS, AnthropicModel, ModelError, SimulatedModel, make_model)
+from elicitagent.session import FIRST_LOOK, Session
 
 BASE = {
     "list": "b110e13691a8881a2acf07b6525393a20a356c3e170a6ce9ec98c038a2a2334b",
@@ -93,3 +94,34 @@ def test_the_frozen_list_records_which_experiments_were_on():
     from elicitagent.replay import RecordingModel
 
     assert sorted(getattr(RecordingModel(model).inner, "experiments")) == [E1_TABLE_ROWS]
+
+
+def test_e2_adds_only_its_paragraphs_to_the_three_reading_calls():
+    base, e2 = asked(), asked([E2_HINTS_ARE_GUESSES])
+    assert e2["list"][0] == base["list"][0] + E2_LIST
+    assert e2["second"][0] == base["second"][0] + E2_SECOND_LOOK
+    assert e2["estimate"][0] == base["estimate"][0] + E2_ESTIMATE
+    assert all(e2[c][1:] == base[c][1:] for c in ("list", "second", "estimate"))  # same user text and schema
+    both = asked([E1_TABLE_ROWS, E2_HINTS_ARE_GUESSES])
+    assert both["list"][0] == base["list"][0] + E1_LIST + E2_LIST
+
+
+def test_a_hinted_value_reaches_the_ask_table_with_its_source(tmp_path):
+    """What E2 relies on in the session, which it does not change: an item the model lists with a value from the
+    folder but stated false is looked for again, and when the second look does not find it stated, it is a gap
+    that keeps its value as the one candidate and its document and passage, so the ask table decides it."""
+    task = tmp_path / "jam"
+    (task / "materials").mkdir(parents=True)
+    (task / "materials" / "last-year.txt").write_text("Last year we made 24 jars of plum jam.\n", encoding="utf-8")
+    item = {"id": "j1", "heading": "Goal and deliverable", "key": "jars", "label": "How many jars to make",
+            "value": "24 jars", "candidates": ["24 jars"], "stated": False, "must_hold": True,
+            "document": "last-year.txt", "passage": "Last year we made 24 jars of plum jam.",
+            "about_named_person": False,
+            "estimate": {"chance_wrong": 0.4, "can_undo": True, "would_notice": True, "model_would_ask": True}}
+    (task / "simulated-model.json").write_text(json.dumps({"items": [item], "second_look": {"j1": None}}))
+    s = Session(task / "materials", "", SimulatedModel.for_folder(task / "materials"), runs_dir=tmp_path / "r",
+                limit=None).start()
+    it = s.get("j1")
+    assert it.way != FIRST_LOOK and it.way in ("ask", "guess and mark it") and not it.cannot_guess
+    assert (it.value, it.kind, it.document) == ("24 jars", "confirm", "last-year.txt")
+    assert s.why_asked(it) == 'last-year.txt says "Last year we made 24 jars of plum jam."'

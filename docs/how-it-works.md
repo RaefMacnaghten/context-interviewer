@@ -90,6 +90,7 @@ uv run elicitagent replay /path/outside/the/repo/plant-care-*.json --sheet /path
 **Experimental settings, off by default and not adopted.** `--experiment` on `dry-run` and `freeze` switches on a candidate change to what the real model is asked in the first look, so a frozen replay can compare it with the tool as it is. They were made by an AI agent on 25 Nov 2026 as candidate answers to two design findings from the practice runs; the author decides whether any is kept. With no `--experiment`, the model is asked exactly what it was asked before (a test pins this). They cannot be used with the simulated model.
 
 - `e1-table-rows`: the first look lists each row of a table that the task acts on as its own item, instead of one item for the whole table.
+- `e2-hints-are-guesses`: a value the folder only hints at (a usual pattern, last period's value, a default) is listed with stated false, with the document and passage it came from, and the second look does not count it as found; so it reaches the ask table as a guess candidate with its source instead of being filled from the file as settled. Only a value the folder states outright for this occasion (or a rule it gives as always applying) is settled. The estimate is asked how likely the hinted value is to be wrong for this occasion.
 
 ## Task folders
 
