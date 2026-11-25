@@ -7,8 +7,8 @@ tables used in the round-two report.
     uv run --with matplotlib python analysis/round2_report.py --replays DIR --lenient DIR \\
         --sheet NAME=PATH ... --out DIR
 
-A sheet may carry two extra columns, found by their header names: one with "hint" in it (strong, medium, weak,
-or none for a gap nothing in the folder bears on) and one with "harm" in it (low, medium, high), as the sheet's
+A sheet may carry two extra columns, found by their header names: one with "hint" in it (stated, strong, medium,
+weak, or none for a gap nothing in the folder bears on) and one with "harm" in it (low, medium, high), as the sheet's
 drafter judged them. Sheets without them still give the curves; the calibration and gap-kind tables use only
 sheets that have them.
 """
@@ -37,6 +37,7 @@ CURVES = [("cost-weighted", "committed", "o-", "tab:blue", "cost-weighted, harm 
           ("confidence-only", "committed", "s-", "tab:orange", "confidence-only")]
 POINTS = [("always-ask", "^", "tab:green"), ("never-ask", "v", "tab:red"), ("model-decides", "D", "tab:gray")]
 GAP_OUTCOMES = ("correct", "wrong", "to mark by hand", "left open")
+HINTS = ["stated", "strong", "medium", "weak", "none"]
 DEFAULT_CW, DEFAULT_CO = "cost-weighted k=1", "confidence-only t=0.3"
 
 
@@ -60,7 +61,7 @@ def extra_columns(path: Path) -> dict[str, dict[str, str]]:
         if index is None or not cells[0] or set(cells[0]) <= set("-: "):
             continue
         get = lambda k: cells[index[k]].strip().lower() if index.get(k) is not None and index[k] < len(cells) else ""
-        out[get("id").upper()] = {"hint": _level(get("hint"), ("strong", "medium", "weak", "none")),
+        out[get("id").upper()] = {"hint": _level(get("hint"), ("stated", "strong", "medium", "weak", "none")),
                                   "harm": _level(get("harm"), ("low", "medium", "high"))}
     return out
 
@@ -151,68 +152,73 @@ def by_setting(runs: list[dict], task: str | None, exp: str, marking: str) -> di
 
 
 def plot(runs: list[dict], tasks: list[str], out: Path) -> list[Path]:
+    """One figure per task and one for all tasks added up: four columns (the experimental settings), four rows
+    (correct and wrong, each under strict and lenient marking). Never-ask (no questions) and the items left open
+    are written in each panel's corner, so the axes show the range where the rules differ."""
     import matplotlib
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
     written = []
+    panels = [("correct", "strict"), ("correct", "lenient"), ("wrong", "strict"), ("wrong", "lenient")]
     for task in [None] + tasks:
-        name = "all six tasks added up per repeat" if task is None else task
-        fig, axes = plt.subplots(3, 4, figsize=(19, 12.5), sharey="row")
+        name = "all tasks added up per repeat" if task is None else task
+        fig, axes = plt.subplots(4, 4, figsize=(19, 16))
         for col, exp in enumerate(EXPS):
             data = {m: by_setting(runs, task, exp, m) for m in ("strict", "lenient")}
-            if not data["strict"]:
-                for ax in axes[:, col]:
-                    ax.text(0.5, 0.5, "no runs", ha="center", transform=ax.transAxes)
-                continue
-            for row, measure in enumerate(("correct", "wrong", "open")):
+            for row, (measure, marking) in enumerate(panels):
                 ax = axes[row, col]
-                for marking, alpha, extra in (("strict", 1.0, ""), ("lenient", 0.55, " (lenient)")):
-                    if measure == "open" and marking == "lenient":
-                        continue  # left open is the same under both markings
-                    d = data[marking]
-                    for rule, harm, fmt, colour, label in CURVES:
-                        pts = sorted(((s, v) for s, v in d.items() if s.startswith(rule) and
-                                      (("harm " + harm in s) if harm != "committed" else "harm" not in s)),
-                                     key=lambda p: float(p[0].split("=")[1].split()[0]))
-                        if not pts:
-                            continue
-                        xs = [v["cost"][0] for _, v in pts]
-                        ys = [v[measure][0] for _, v in pts]
-                        yerr = [[v[measure][0] - v[measure][1] for _, v in pts], [v[measure][2] - v[measure][0] for _, v in pts]]
-                        xerr = [[v["cost"][0] - v["cost"][1] for _, v in pts], [v["cost"][2] - v["cost"][0] for _, v in pts]]
-                        ax.errorbar(xs, ys, yerr=yerr, xerr=xerr, fmt=fmt if marking == "strict" else fmt[0] + "--",
-                                    color=colour, alpha=alpha, capsize=2, markersize=5, linewidth=1.2,
-                                    label=(label + extra) if (row == 0 and col == 0) else None)
-                    for rule, marker, colour in POINTS:
-                        if rule in d:
-                            v = d[rule]
-                            ax.errorbar([v["cost"][0]], [v[measure][0]],
-                                        yerr=[[v[measure][0] - v[measure][1]], [v[measure][2] - v[measure][0]]],
-                                        xerr=[[v["cost"][0] - v["cost"][1]], [v["cost"][2] - v["cost"][0]]],
-                                        fmt=marker, color=colour, alpha=alpha, capsize=2, markersize=7,
-                                        mfc=colour if marking == "strict" else "none",
-                                        label=(rule + extra) if (row == 0 and col == 0) else None)
+                d = data[marking]
+                if not d:
+                    ax.text(0.5, 0.5, "no runs", ha="center", transform=ax.transAxes)
+                    continue
+                for rule, harm, fmt_, colour, label in CURVES:
+                    pts = sorted(((st, v) for st, v in d.items() if st.startswith(rule) and
+                                  (("harm " + harm in st) if harm != "committed" else "harm" not in st)),
+                                 key=lambda p: float(p[0].split("=")[1].split()[0]))
+                    if not pts:
+                        continue
+                    xs = [v["cost"][0] for _, v in pts]
+                    ys = [v[measure][0] for _, v in pts]
+                    yerr = [[v[measure][0] - v[measure][1] for _, v in pts], [v[measure][2] - v[measure][0] for _, v in pts]]
+                    xerr = [[v["cost"][0] - v["cost"][1] for _, v in pts], [v["cost"][2] - v["cost"][0] for _, v in pts]]
+                    ax.errorbar(xs, ys, yerr=yerr, xerr=xerr, fmt=fmt_, color=colour, capsize=2, markersize=5,
+                                linewidth=1.2, alpha=0.85, label=label if (row == 0 and col == 0) else None)
+                    for (st, v), x, y in zip(pts, xs, ys):
+                        if harm == "committed":
+                            ax.annotate(st.split("=")[1].split()[0], (x, y), textcoords="offset points",
+                                        xytext=(3, 4 if rule == "cost-weighted" else -10), fontsize=6, color=colour)
+                for rule, marker, colour in POINTS:
+                    if rule in d and rule != "never-ask":
+                        v = d[rule]
+                        ax.errorbar([v["cost"][0]], [v[measure][0]],
+                                    yerr=[[v[measure][0] - v[measure][1]], [v[measure][2] - v[measure][0]]],
+                                    xerr=[[v["cost"][0] - v["cost"][1]], [v["cost"][2] - v["cost"][0]]],
+                                    fmt=marker, color=colour, capsize=2, markersize=7,
+                                    label=rule if (row == 0 and col == 0) else None)
+                never = d.get("never-ask")
+                opened = max((v["open"][0] for k, v in d.items() if k != "never-ask"), default=0)
+                note = (f"never-ask: cost 0, {measure} {fmt(never[measure])}, left open {fmt(never['open'])}"
+                        if never else "") + f"\nevery other rule leaves at most {opened:g} open"
+                ax.text(0.02, 0.98, note, transform=ax.transAxes, va="top", fontsize=7, color="tab:red")
                 ax.grid(alpha=0.3)
-                ax.set_ylim(bottom=0)
                 if row == 0:
-                    reps = max(v["repeats"] for v in data["strict"].values())
+                    reps = max(v["repeats"] for v in d.values())
                     ax.set_title(f"{EXP_LABEL[exp]} ({reps} first look{'s' if reps != 1 else ''})", fontsize=10)
                 if col == 0:
-                    ax.set_ylabel({"correct": "items marked correct", "wrong": "items marked wrong",
-                                   "open": "items left open"}[measure])
-                if row == 2:
+                    ax.set_ylabel(f"items marked {measure} ({marking})")
+                if row == 3:
                     ax.set_xlabel("question cost (1 = one choose question)")
-        fig.legend(loc="lower center", ncol=5, fontsize=8, frameon=False)
-        fig.suptitle(f"{PILOT}: correct, wrong and left open against question cost, by rule, frozen replay: {name}",
-                     fontsize=12)
-        fig.text(0.5, 0.055, f"{PILOT}. Each point is the mean over the frozen first looks of that setting; bars show "
-                 "the lowest and highest. Solid: strict marking (wording). Dashed, faint, hollow: lenient marking (same "
-                 "meaning, judged blind). Lines join a rule's own settings in order of k or t.", ha="center", fontsize=8)
-        fig.tight_layout(rect=(0, 0.08, 1, 0.96))
+        fig.legend(loc="lower center", ncol=6, fontsize=8, frameon=False)
+        fig.suptitle(f"{PILOT}\ncorrect and wrong against question cost, by rule, frozen replay: {name}", fontsize=12)
+        fig.text(0.5, 0.035, f"{PILOT}. Each point is the mean over the frozen first looks of that setting; bars show "
+                 "the lowest and highest. Lines join a rule's own settings in order of k or t (labelled). Columns "
+                 "come from different first looks, so compare rules within a column, not across.", ha="center",
+                 fontsize=8)
+        fig.tight_layout(rect=(0, 0.05, 1, 0.95))
         path = out / f"replay-{'all' if task is None else task}.png"
-        fig.savefig(path, dpi=110)
+        fig.savefig(path, dpi=105)
         plt.close(fig)
         written.append(path)
     return written
@@ -286,6 +292,31 @@ def disagreements(runs, a=DEFAULT_CW, b=DEFAULT_CO) -> tuple[str, dict]:
     return md_table(head, body), tally
 
 
+def paired_differences(runs, a=DEFAULT_CW, b=DEFAULT_CO) -> str:
+    """Within each frozen list (same items, same estimates), the default settings of the two rules side by side:
+    the difference is due to the rule alone. Lenient marking."""
+    per = defaultdict(lambda: defaultdict(list))
+    for frozen, by in paired(runs).items():
+        if a not in by or b not in by:
+            continue
+        ca, cb = counts(by[a], "lenient"), counts(by[b], "lenient")
+        exp = by[a]["exp"]
+        for k in ("cost", "correct", "wrong"):
+            per[exp][k].append(ca[k] - cb[k])
+        per[exp]["same"].append(all(x["decided"] == y["decided"] for x, y in zip(by[a]["items"], by[b]["items"])))
+    body = []
+    for exp in EXPS:
+        if exp not in per:
+            continue
+        d = per[exp]
+        body.append([EXP_LABEL[exp], len(d["cost"]), sum(d["same"]),
+                     " ".join(f"{x:+g}" for x in d["cost"]), " ".join(f"{x:+g}" for x in d["correct"]),
+                     " ".join(f"{x:+g}" for x in d["wrong"])])
+    return md_table(["Setting", "Frozen lists", "Lists where the two rules decide every gap the same",
+                     f"Question cost, {a} minus {b}, per list", "Correct (lenient), difference per list",
+                     "Wrong (lenient), difference per list"], body)
+
+
 def gap_kinds(runs, a=DEFAULT_CW, b=DEFAULT_CO) -> str:
     """For gaps the sheet's drafter classed by hint strength and harm: how often each rule asked."""
     cells = defaultdict(lambda: defaultdict(lambda: [0, 0, 0]))  # exp -> (hint, harm) -> [n, asked a, asked b]
@@ -305,8 +336,7 @@ def gap_kinds(runs, a=DEFAULT_CW, b=DEFAULT_CO) -> str:
         if exp not in cells:
             continue
         body = [[hint, harm, n, f"{x}/{n}", f"{y}/{n}"] for (hint, harm), (n, x, y) in
-                sorted(cells[exp].items(), key=lambda kv: (["strong", "medium", "weak", "none"].index(kv[0][0])
-                                                           if kv[0][0] in ("strong", "medium", "weak", "none") else 9,
+                sorted(cells[exp].items(), key=lambda kv: (HINTS.index(kv[0][0]) if kv[0][0] in HINTS else 9,
                                                            ["low", "medium", "high", "-"].index(kv[0][1])
                                                            if kv[0][1] in ("low", "medium", "high", "-") else 9))]
         out.append(f"\n#### {EXP_LABEL[exp]}: {PILOT}\n")
@@ -325,7 +355,7 @@ def calibration(runs) -> str:
         if not gaps:
             continue
         body = []
-        for hint in ("strong", "medium", "weak", "none", ""):
+        for hint in ("stated", "strong", "medium", "weak", "none", ""):
             g = [it for it in gaps if it["sheet_hint"] == hint]
             if not g:
                 continue
@@ -349,6 +379,23 @@ def calibration(runs) -> str:
         out.append(md_table(["Chance wrong (model)", "Gaps with a value that could be marked",
                              "Value in fact wrong", "Share wrong"], body))
     return "\n".join(out)
+
+
+def harm_agreement(runs) -> str:
+    """The model's harm band (from its two yes-or-no answers) against the drafter's harm, one row per gap per
+    frozen list, from the never-ask line."""
+    c = defaultdict(int)
+    for r in runs:
+        if r["setting"] != "never-ask":
+            continue
+        for it in r["items"]:
+            if it["chance_wrong"] is not None and it["sheet_harm"] in ("low", "medium", "high"):
+                c[(it["sheet_harm"], it["harm_band"])] += 1
+    body = [[sh] + [c[(sh, mb)] for mb in ("low", "medium", "high")] for sh in ("low", "medium", "high")]
+    agree = sum(c[(h, h)] for h in ("low", "medium", "high"))
+    total = sum(c.values())
+    return md_table(["Harm (sheet) \\ harm (model)", "low", "medium", "high"], body) + \
+        f"\n\nSame band: {agree} of {total} gaps."
 
 
 def reach(runs, rows, extras) -> str:
@@ -398,11 +445,19 @@ def first_look_hints(frozen_dir: Path) -> str:
             resettled = sum(1 for x in hints if ways.get(x["id"]) == "read a file (second look)")
             second = sum(1 for w in ways.values() if w == "read a file (second look)")
             gaps = [d for d in f["decisions"] if d["chance_wrong"] is not None]
+            # why the cost-weighted rule could not decide a gap, in the ask table's own order of reasons
+            why = defaultdict(int)
+            for d in gaps:
+                if d["cannot_guess"]:
+                    why["clash" if d["conflict"] else "named person" if d["named_person"] else
+                        "cannot be undone" if not d["can_undo"] else "nothing to guess from"] += 1
             body.append([f["task"], EXP_LABEL[exp], path.stem.rsplit("-", 1)[1], len(raw), stated, len(hints),
-                         resettled, second, len(gaps), sum(1 for d in gaps if not d["cannot_guess"])])
+                         resettled, second, len(gaps), sum(1 for d in gaps if not d["cannot_guess"]),
+                         why["cannot be undone"], why["nothing to guess from"], why["named person"], why["clash"]])
     return md_table(["Task", "Setting", "First look", "Items listed", "Listed as stated", "Listed as a hint "
                      "(not stated, with a value and passage)", "Hints the second look settled anyway",
-                     "All second-look fills", "Gaps", "Gaps the cost-weighted rule decides"], body)
+                     "All second-look fills", "Gaps", "Gaps the cost-weighted rule decides",
+                     "Cannot-guess: cannot be undone", "nothing to guess from", "named person", "clash"], body)
 
 
 def _group(runs, setting):
@@ -433,10 +488,12 @@ def main(argv=None) -> int:
             f"\n## What each first look listed: {PILOT}\n", first_look_hints(a.frozen),
             f"\n## Where the sheet's hinted gaps went: {PILOT}\n", reach(runs, rows, extras),
             f"\n## Which kind of gap each rule asked: {PILOT}\n", gap_kinds(runs),
+            f"\n## The two default settings on the same frozen list: {PILOT}\n", paired_differences(runs),
             f"\n## Where {DEFAULT_CW} and {DEFAULT_CO} disagree: {PILOT}\n",
             "\n".join(f"- {EXP_LABEL[e]}: " + "; ".join(f"{k}: {v}" for k, v in sorted(t.items()))
                       for e, t in tally.items()), "", dis,
-            f"\n## Calibration: {PILOT}\n", calibration(runs)]
+            f"\n## Calibration: {PILOT}\n", calibration(runs),
+            f"\n## The model's harm against the sheet's: {PILOT}\n", harm_agreement(runs)]
     (a.out / "tables.md").write_text("\n".join(text) + "\n", encoding="utf-8")
     (a.out / "summary.json").write_text(json.dumps({
         "pilot": PILOT,
