@@ -105,6 +105,10 @@ def _materials_digest(materials: Path) -> dict[str, str]:
             for p in sorted(materials.rglob("*")) if p.is_file()}
 
 
+def _table_digest(table: AskTable) -> str:
+    return hashlib.sha256(json.dumps(table.data, sort_keys=True).encode()).hexdigest()
+
+
 def _task_parts(task: str | Path) -> tuple[Path, Path, str]:
     task_dir = Path(task).resolve()
     intent_file = task_dir / "intent.txt"
@@ -127,6 +131,8 @@ def freeze(task: str | Path, out: str | Path, model_choice: str = "auto", model:
            runs_dir: str | Path | None = None, experiments=()) -> dict:
     """One first look on the model, saved for replay. Returns what was saved."""
     task_dir, materials, intent = _task_parts(task)
+    if model is not None and experiments:
+        raise ReplayError("experiments are set on the model itself when a model is given")
     inner = model or make_model(model_choice, materials, experiments=experiments)
     rec = RecordingModel(inner)
     session = Session(materials, intent, rec, runs_dir=runs_dir, limit=None).start()
@@ -139,6 +145,7 @@ def freeze(task: str | Path, out: str | Path, model_choice: str = "auto", model:
         "model_kind": inner.kind,
         "experiments": sorted(getattr(inner, "experiments", ()) or ()),
         "materials": _materials_digest(materials),
+        "ask_table": _table_digest(AskTable.load()),
         **rec.record,
         "decided_under": {"rule": session.rule, "threshold": session.threshold},
         "decisions": decisions(session),
@@ -173,7 +180,10 @@ def replay_session(frozen: dict, rule: str, threshold: float | None, harm: dict 
     task_dir = Path(frozen["task_dir"])
     materials = task_dir / "materials"
     if _materials_digest(materials) != frozen["materials"]:
-        raise ReplayError(f"the materials in {materials} have changed since the first look was frozen")
+        raise ReplayError(f"the materials in {materials} are missing or have changed since the first look was frozen")
+    base = table or AskTable.load()
+    if "ask_table" in frozen and _table_digest(base) != frozen["ask_table"]:
+        raise ReplayError("the ask table has changed since the first look was frozen; harm ratios are given at run time")
     return Session(materials, frozen["intent"], FrozenModel(frozen), table=table_with_harm(harm, table), rule=rule,
                    threshold=threshold, runs_dir=runs_dir, limit=None).start()
 
@@ -237,7 +247,8 @@ def replay_one(frozen: dict, rows, setting: Setting, runs_dir: str | Path | None
         items.append({**{k: d[k] for k in ("id", "label", "heading", "kind", "cost", "harm_band", "harm",
                                              "chance_wrong", "can_undo", "would_notice", "cannot_guess",
                                              "named_person", "conflict", "must_hold", "document", "passage")},
-                      "decided": d["way"], "guess_value": d["value"] if d["way"] == "guess and mark it" else None,
+                      "decided": d["way"], "model_value": d["value"],
+                      "guess_value": d["value"] if d["way"] == "guess and mark it" else None,
                       "row": row.id if row else None, "asked": it.asked, "state": it.state, "value": it.value,
                       "outcome": o["outcome"]})
     return {
@@ -251,6 +262,7 @@ def replay_one(frozen: dict, rows, setting: Setting, runs_dir: str | Path | None
         "question_cost": session.running_cost,
         "answered_on_review": len(review),
         "outcomes": counts,
+        "sheet_rows_not_found_by_the_tool": [r.id for r in rows if r.id not in {row.id for row in rows_for.values()}],
         "items": items,
     }
 

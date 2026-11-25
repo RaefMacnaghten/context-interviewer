@@ -211,3 +211,43 @@ def test_recording_passes_replies_through_unchanged(tmp_path):
     assert isinstance(rec, Model) and rec.kind == "simulated" and rec.name == "simulated"
     assert rec.list_items("", None) == inner.list_items("", None)
     assert rec.record["list_items"] == inner.list_items("", None)
+
+
+def test_a_changed_ask_table_or_a_model_with_experiments_is_refused(tmp_path):
+    task = bake_sale(tmp_path)
+    frozen = freeze(task, tmp_path / "f.json", model_choice="simulated", runs_dir=tmp_path / "runs")
+    table = AskTable.load()
+    edited = AskTable({**table.data, "cost": {**table.data["cost"], "open": 3}}, table.path)
+    with pytest.raises(ReplayError):
+        replay_session(frozen, "always-ask", None, runs_dir=tmp_path / "r", table=edited)
+    # a harm ratio given at run time is not an edit of the ask table
+    replay_session(frozen, "cost-weighted", 1, {"low": 1, "medium": 2, "high": 4}, runs_dir=tmp_path / "r")
+    with pytest.raises(ReplayError):
+        freeze(task, tmp_path / "g.json", model=SimulatedModel.for_folder(task / "materials"),
+               experiments=["e1-table-rows"])
+
+
+def test_a_first_look_with_nothing_missing_freezes_and_replays(tmp_path):
+    task = tmp_path / "tidy"
+    (task / "materials").mkdir(parents=True)
+    (task / "materials" / "a.txt").write_text("Bins go out on Tuesday.\n", encoding="utf-8")
+    item = {"id": "b1", "heading": "Times", "key": "bins", "label": "Day the bins go out", "value": "Tuesday",
+            "candidates": ["Tuesday"], "stated": True, "must_hold": True, "document": "a.txt",
+            "passage": "Bins go out on Tuesday.", "about_named_person": False}
+    (task / "simulated-model.json").write_text(json.dumps({"items": [item], "second_look": {}}))
+    frozen = freeze(task, tmp_path / "f.json", model_choice="simulated", runs_dir=tmp_path / "runs")
+    assert frozen["second_look"] is None and frozen["estimate"] is None
+    r = replay_one(frozen, [], Setting("always-ask"), tmp_path / "r")
+    assert r["questions"] == 0 and r["items"][0]["decided"] == "read a file (first look)"
+
+
+def test_the_replay_reports_sheet_rows_no_item_matched(tmp_path):
+    task = bake_sale(tmp_path)
+    frozen = freeze(task, tmp_path / "f.json", model_choice="simulated", runs_dir=tmp_path / "runs")
+    sheet = tmp_path / "bake-sale-answer-sheet.md"
+    sheet.write_text(SHEET + "| B10 | Other | Colour of the bunting | Yellow | exact | open | nice if possible | "
+                     "only in the person's head |\n", encoding="utf-8")
+    r = replay_one(frozen, parse_sheet(sheet), Setting("never-ask"), tmp_path / "r")
+    # the goal row goes unmatched too: the intent the script typed is never matched to a row, as in a dry run
+    assert r["sheet_rows_not_found_by_the_tool"] == ["B01", "B10"]
+    assert {i["id"]: i["model_value"] for i in r["items"]}["r1"] == "lemon cake and flapjacks"
