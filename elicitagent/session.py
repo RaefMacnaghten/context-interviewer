@@ -80,6 +80,12 @@ class Item:
     rejected: bool = False
     # the clash between the person's intent and the folder's goal: asked before anything else
     ask_first: bool = False
+    # the person's reply to the question ("answer", "skip" or "I can't answer this"), and what the item was before
+    # it, so the Back button can show the reply and replace it
+    reply_action: str | None = None
+    before_reply: dict | None = None
+    # the model's wording of the question ({"question", "answer_form"}); None means the plain template is used
+    wording: dict | None = None
 
     @property
     def stated_or_inferred(self) -> str:
@@ -94,6 +100,29 @@ def value_supported(value: str | None, passage: str | None) -> bool:
     """A stated value with numbers in it (a time, a date, a count) must show those numbers in its passage."""
     numbers = re.findall(r"\d+(?::\d+)?", value or "")
     return all(n in (passage or "") for n in numbers)
+
+
+def _short(text: str | None, most: int = 100) -> str:
+    """A passage or value cut to about a line, at a word, with an ellipsis when cut."""
+    flat = " ".join((text or "").split())
+    if len(flat) <= most:
+        return flat
+    cut = flat[:most]
+    space = cut.rfind(" ")
+    return (cut[:space] if space > most // 2 else cut).rstrip(" ,;:.") + "…"
+
+
+def _quoted(lead: str, text: str) -> str:
+    """A sentence ending in a quotation: no second full stop after a quotation that already ends a sentence."""
+    return f'{lead} "{text}"' + ("" if text[-1:] in ".?!…" else ".")
+
+
+def _sentence(text: str, end: str) -> str:
+    """A part of the question as a sentence: trimmed, ending with a full stop or question mark."""
+    text = " ".join((text or "").split())
+    if not text:
+        return ""
+    return text if text[-1] in ".?!" else text + end
 
 
 def _slug(text: str) -> str:
@@ -227,10 +256,12 @@ class Session:
         self.items: list[Item] = []
         self.question_count = 0
         self.running_cost = 0.0
+        self.asked_order: list[str] = []  # item ids, in the order their questions were asked
         self.limit_reached = False
         # Plan change 2: the limit is a number of questions and starts at the ask table's value. None switches it
         # off. Question cost is still counted, for the rule, the gap trace and the "why this question" panel.
         self.limit = self.table.limit_start if limit == "default" else (_whole(limit) if limit is not None else None)
+        self.limit_at_start = self.limit  # what the start page asked for; the limit grows if the person continues
         self._limit_logged_at: int | None = None
         self.stopped = False
         self.finished = False
@@ -259,6 +290,7 @@ class Session:
         ("clash", "Checking for clashes"),
         ("second", "Second look for what is missing"),
         ("estimate", "Estimating the gaps"),
+        ("word", "Wording the questions"),
     ]
 
     def _progress_init(self) -> None:
@@ -408,12 +440,44 @@ class Session:
             it.model_would_ask = est.get("model_would_ask")
             self._decide(it)
         self._done("estimate", f"{len(gaps)} {'gap' if len(gaps) == 1 else 'gaps'} estimated and decided" if gaps else "no gaps to estimate")
+        # Every decision is made. One last call words the questions to be asked; it changes no decision, and a
+        # question it does not word (or a failed call) is worded from the plain template.
+        self._word_questions()
         for it in self.items:
             self._log(it, "decided", it.value)
         self._check_limit()
         self.status = "ready"
         self.progress["current"] = None
         return self
+
+    def _word_questions(self) -> None:
+        from .models import ModelError
+
+        to_word = [it for it in self.items if it.pending]
+        if not to_word:
+            self._done("word", "no questions to word")
+            return
+        self._step("word", n=0, of=len(to_word), detail=f"One model call words {len(to_word)} "
+                   f"{'question' if len(to_word) == 1 else 'questions'}; nothing is decided here")
+        try:
+            wording = self.model.word_questions(self.intent, self.folder, [self._wording_view(it) for it in to_word])
+        except ModelError:
+            wording = {}
+        for it in to_word:
+            w = wording.get(it.id) or {}
+            if str(w.get("question") or "").strip():
+                it.wording = {"question": str(w["question"]).strip(), "answer_form": str(w.get("answer_form") or "").strip()}
+        worded = sum(1 for it in to_word if it.wording)
+        self._done("word", f"{worded} of {len(to_word)} worded by the model, the rest from a plain template"
+                   if worded < len(to_word) else f"{worded} worded")
+
+    def _wording_view(self, it: Item) -> dict:
+        offered = it.candidates if (not it.named_person or self.documented(it)) else []
+        return {"id": it.id, "heading": it.heading, "label": it.label, "kind": it.kind,
+                "value": self.confirm_value(it) if it.kind == "confirm" else None,
+                "candidates": offered if it.kind == "choose" else [],
+                "document": it.document, "passage": it.passage, "about_named_person": it.named_person,
+                "clash": [{"document": src["document"], "value": src["value"]} for src in it.sources] or None}
 
     def _with_intent(self, items: list[Item]) -> list[Item]:
         """The intent becomes the first item under "Goal and deliverable", confirmed by the person, with the
@@ -677,11 +741,47 @@ class Session:
         return it.value or (it.candidates[0] if len(it.candidates) == 1 else None)
 
     def question_text(self, it: Item) -> str:
+        """The question as the person reads it, in three parts: what is needed (the model's wording, or a plain
+        template), why it is asked (what the files say or lack, built here from the passages, never by the model),
+        and what form of answer is wanted."""
+        parts = self.question_parts(it)
+        return " ".join(part for part in (parts["ask"], parts["why"], parts["form"]) if part)
+
+    def question_parts(self, it: Item) -> dict:
+        """The three parts of the question, for the page to set out: the question, why, and what to answer."""
+        w = it.wording or {}
+        return {"ask": _sentence(w.get("question") or self._template_question(it), "?"), "why": self.why_asked(it),
+                "form": _sentence(w.get("answer_form") or self._template_form(it), ".")}
+
+    def _template_question(self, it: Item) -> str:
         if it.kind == "confirm":
-            return f"Is this right? {it.label}: {self.confirm_value(it)}"
+            return f'Is "{self.confirm_value(it)}" right for "{it.label}"?'
         if it.kind == "choose":
-            return f"Which is right? {it.label}"
-        return f"{it.label}?"
+            return f'Which is right for "{it.label}"?'
+        return f'What should the brief say for "{it.label}"?'
+
+    @staticmethod
+    def _template_form(it: Item) -> str:
+        if it.kind == "confirm":
+            return "Answer yes, or type the right value."
+        if it.kind == "choose":
+            return "Pick one, or type another answer."
+        return "Answer in a few words."
+
+    @staticmethod
+    def why_asked(it: Item) -> str:
+        """What the files say or lack, from the passages the tool holds."""
+        if it.ask_first:
+            return "What you typed and the folder disagree about the goal."
+        if it.sources:
+            sides = "; ".join((f'you typed "{_short(src["value"])}"' if src.get("person")
+                               else f'{src["document"]} says "{_short(src["value"])}"') for src in it.sources)
+            return f"The documents disagree: {sides}" + ("" if sides.endswith(('."', '?"', '!"', '…"')) else ".")
+        if it.document and it.passage_found and it.passage:
+            return _quoted(f"{it.document} says", _short(it.passage))
+        if it.document:
+            return f"{it.document} does not say it outright."
+        return "Nothing in the folder says it."
 
     def get(self, item_id: str) -> Item:
         for it in self.items:
@@ -701,26 +801,68 @@ class Session:
             raise ValueError(f"{item_id} is not waiting for a reply")
         if self.current_question() is not it:
             raise ValueError(f"{item_id} is not the current question")
+        if action == "answer" and (value is None or not str(value).strip()):
+            raise ValueError("an answer needs a value")
+        if action not in ("answer", "skip", CANT_ANSWER):
+            raise ValueError(f"unknown reply: {action}")
         it.pending = False
         it.asked = True
         self.question_count += 1
         self.running_cost += it.cost
+        self.asked_order.append(it.id)
+        it.before_reply = {"value": it.value, "way": it.way, "source": it.source, "who_could": it.who_could}
+        self._apply_reply(it, action, value, who)
+        self._log(it, action, it.value if action == "answer" else (it.who_could if action == CANT_ANSWER else None))
+        self._check_limit()
+        return it
+
+    def _apply_reply(self, it: Item, action: str, value: str | None, who: str | None) -> None:
+        """Set the item from the person's reply, starting from what it was before the question was asked."""
+        before = it.before_reply or {}
+        it.value, it.way = before.get("value"), before.get("way", it.way)
+        it.source, it.who_could = before.get("source", ""), before.get("who_could")
+        it.reply_action = action
         if action == "answer":
-            if value is None or not str(value).strip():
-                raise ValueError("an answer needs a value")
             it.value = str(value).strip()
             it.state, it.source = "confirmed", "person"
         elif action == "skip":
             it.state = "conflict" if it.sources else "open"
-        elif action == CANT_ANSWER:
+        else:  # "I can't answer this"
             it.state = NOT_AVAILABLE
             it.way = NOT_AVAILABLE
             it.who_could = (who or "").strip() or None
-        else:
+
+    def revise(self, item_id: str, action: str, value: str | None = None, who: str | None = None) -> Item:
+        """The Back button: replace the reply to a question already asked. It is not a new question, so the count,
+        the question cost and the limit stay as they are. Everything shown is worked out again from the items, so
+        the brief in progress, Still open and the lists follow the new reply."""
+        self._not_finished()
+        it = self.get(item_id)
+        if not it.asked or it.id not in self.asked_order:
+            raise ValueError(f"{item_id} has not been asked")
+        if action == "answer" and (value is None or not str(value).strip()):
+            raise ValueError("an answer needs a value")
+        if action not in ("answer", "skip", CANT_ANSWER):
             raise ValueError(f"unknown reply: {action}")
-        self._log(it, action, it.value if action == "answer" else (it.who_could if action == CANT_ANSWER else None))
-        self._check_limit()
+        if it.rejected:
+            raise ValueError(f"{item_id} was rejected; restore it first")
+        it.answered_on_review = False
+        self._apply_reply(it, action, value, who)
+        self._log(it, f"revise: {action}", it.value if action == "answer" else (it.who_could if action == CANT_ANSWER else None))
         return it
+
+    def asked_view(self) -> list[dict]:
+        """The questions already asked, in order, each with the reply now standing, for the Back button."""
+        out = []
+        for n, item_id in enumerate(self.asked_order, start=1):
+            it = self.get(item_id)
+            out.append({"number": n, "item": it.id, "label": it.label, "text": self.question_text(it),
+                        "parts": self.question_parts(it), "kind": it.kind,
+                        "reply": it.reply_action, "value": it.value if it.reply_action == "answer" else None,
+                        "who": it.who_could, "candidates": it.candidates, "sources": it.sources,
+                        "confirm_value": (it.before_reply or {}).get("value") or (it.candidates[0] if len(it.candidates) == 1 else None),
+                        "reason": it.reason})
+        return out
 
     def answer_on_review(self, item_id: str, value: str | None) -> Item:
         """Plan change 1: on the end screen the person can answer any item that is waiting or open. No question
@@ -836,8 +978,39 @@ class Session:
 
     # ------------------------------------------------------------ view
 
+    @staticmethod
+    def way_tag(it: Item) -> str | None:
+        """The "how it was settled" tag beside the status. None when it would only repeat the status: an item the
+        person could not answer has the status "not available here" and the way "not available here"."""
+        if it.answered_on_review:
+            return "answered on review"
+        if not it.way or it.way == it.state:
+            return None
+        return it.way
+
+    @staticmethod
+    def can_confirm(it: Item) -> bool:
+        """Whether the Confirm button shows: only on an item with one value that is not yet confirmed (a guess, or
+        a waiting item that has a value). A confirmed item, from a file or from the person, has nothing to confirm."""
+        return bool(it.value) and not it.rejected and it.state in ("assumed", "open")
+
+    def origin(self, it: Item) -> str | None:
+        """Where an item came from, in one plain line, for an item that has no passage to show. None when the item
+        shows its passage (or a clash shows each side's passage) instead."""
+        if it.way == SAID:
+            return "From what you typed on the start page."
+        if it.sources or (it.document and it.passage_found):
+            return None
+        if it.document:
+            return f"Not quoted in any file: worked out from {it.document}."
+        whole = "the folder as a whole and what you typed" if self.intent else "the folder as a whole"
+        return f"Not in any file: worked out from {whole}."
+
     def item_view(self, it: Item) -> dict:
         d = asdict(it)
+        d["origin"] = self.origin(it)
+        d["way_tag"] = self.way_tag(it)
+        d["can_confirm"] = self.can_confirm(it)
         d["stated_or_inferred"] = it.stated_or_inferred
         d["must_hold_or_nice"] = it.must_hold_or_nice
         doc = self.folder.get(it.document) if (self.folder and it.document) else None
@@ -888,6 +1061,8 @@ class Session:
             "progress": self.progress_view(),
             "task": self.task,
             "intent": self.intent,
+            "folder": str(self.folder_path.relative_to(REPO_ROOT)) if self.folder_path.is_relative_to(REPO_ROOT) else str(self.folder_path),
+            "limit_at_start": self.limit_at_start,
             "run": self.run,
             "rule": self.rule,
             "rule_label": self.table.rule_label(self.rule),
@@ -905,11 +1080,12 @@ class Session:
             if ready else None,
             "question": None
             if q is None
-            else {"item": q.id, "text": self.question_text(q), "kind": q.kind, "cost": q.cost, "reason": q.reason,
+            else {"item": q.id, "text": self.question_text(q), "parts": self.question_parts(q), "kind": q.kind, "cost": q.cost, "reason": q.reason,
                   "candidates": q.candidates, "value": self.confirm_value(q) if q.kind == "confirm" else q.value,
                   "sources": q.sources},
             "questions_left": 0 if (self.stopped or not ready) else len(self.queue()),
             "question_count": self.question_count,
+            "asked": self.asked_view() if ready else [],
             "running_cost": self.running_cost,
             "limit_reached": self.limit_reached,
             "limit": self.limit,

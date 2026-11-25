@@ -1,0 +1,24 @@
+Subject: Your Hollowmere Ramblers membership is due for renewal
+
+Dear {first_name},
+
+Your membership of Hollowmere Ramblers ends on {expires}. We'd love you to stay with us
+for another year of walks.
+
+The fee for {type} membership is £{fee}. (Adult £26, concession £15, family £40.)
+
+If you've set up auto-renew, there's nothing to do: we'll take the payment from your
+saved card on {expires}.
+
+Otherwise you can pay by bank transfer to the club account:
+  Account name: Hollowmere Ramblers
+  Sort code: ask me
+  Account number: 30405060
+  Reference: tbc
+
+or in cash to Marjorie at any Sunday walk.
+
+If you've already paid, thank you, and please ignore this email.
+
+Happy walking,
+Membership secretary, Hollowmere Ramblers

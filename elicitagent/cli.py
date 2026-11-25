@@ -22,6 +22,8 @@ def main(argv: list[str] | None = None) -> int:
     p_dry.add_argument("--threshold", type=float, default=None)
     p_dry.add_argument("--sheet", default=None, help="answer sheet path (default: the one answer sheet in the task folder)")
     p_dry.add_argument("--runs-dir", default=None)
+    p_dry.add_argument("--limit", type=int, default=None,
+                       help="a question limit; the script stops when it is reached (default: no limit, as in the test)")
 
     args = parser.parse_args(argv)
     if args.command == "serve":
@@ -33,7 +35,7 @@ def main(argv: list[str] | None = None) -> int:
         from .harness import dry_run
 
         return dry_run(args.task, model_choice=args.model, rule=args.rule, threshold=args.threshold,
-                       sheet=args.sheet, runs_dir=args.runs_dir)
+                       sheet=args.sheet, runs_dir=args.runs_dir, limit=args.limit)
     return 1
 
 

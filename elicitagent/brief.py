@@ -7,6 +7,7 @@ import time
 from typing import TYPE_CHECKING
 
 from . import ALL_HEADINGS
+from .labels import ASK_SOMEONE_ELSE, in_sentence
 
 if TYPE_CHECKING:
     from .session import Item, Session
@@ -37,7 +38,7 @@ def _source_note(it: "Item") -> str:
     if it.state == "conflict":
         return f"conflict: {_disagree(it)}"
     if it.state == "not available here":
-        return "not available here"
+        return in_sentence("not available here")
     return "open"
 
 
@@ -47,7 +48,7 @@ def anchor(heading: str) -> str:
     return re.sub(r"[^a-z0-9 -]", "", heading.lower()).strip().replace(" ", "-")
 
 
-STATE_WORDS = {"open": "open", "conflict": "conflict", "not available here": "not available here"}
+STATE_WORDS = {"open": "open", "conflict": "conflict", "not available here": in_sentence("not available here")}
 
 
 def write_brief(session: "Session") -> str:
@@ -84,7 +85,7 @@ def write_brief(session: "Session") -> str:
     lines.append("")
     if unsettled:
         for it in unsettled:
-            lines.append(f"- **{it.label}** ({STATE_WORDS[it.state]}, {it.must_hold_or_nice}): under "
+            lines.append(f"- **{it.label}** ({STATE_WORDS[it.state]}, {in_sentence(it.must_hold_or_nice)}): under "
                          f"[{it.heading}](#{anchor(it.heading)})")
     else:
         lines.append("- Nothing is still open: every item is settled.")
@@ -102,12 +103,12 @@ def write_brief(session: "Session") -> str:
             extra = ""
             if it.state == "conflict" and it.sources:
                 extra = f" ({_disagree(it)}: {_sides(it)})"
-            lines.append(f"- **{it.label}** ({it.heading}, {it.must_hold_or_nice}){extra}")
+            lines.append(f"- **{it.label}** ({it.heading}, {in_sentence(it.must_hold_or_nice)}){extra}")
     else:
         lines.append("- Nothing.")
     lines.append("")
 
-    lines.append("## Not available here")
+    lines.append(f"## {ASK_SOMEONE_ELSE}")
     lines.append("")
     lines.append("The person could not answer these, and the folder does not hold them.")
     lines.append("")
@@ -130,9 +131,9 @@ def write_brief(session: "Session") -> str:
         for it in under:
             if it.state in UNSETTLED:
                 shown = "still open" if not (it.state == "conflict" and it.sources) else _sides(it)
-                lines.append(f"- **{it.label}**: {shown} _({it.must_hold_or_nice}; {_source_note(it)})_")
+                lines.append(f"- **{it.label}**: {shown} _({in_sentence(it.must_hold_or_nice)}; {_source_note(it)})_")
             else:
-                lines.append(f"- **{it.label}**: {it.value} _({it.must_hold_or_nice}; {_source_note(it)})_")
+                lines.append(f"- **{it.label}**: {it.value} _({in_sentence(it.must_hold_or_nice)}; {_source_note(it)})_")
         lines.append("")
     if rejected:
         lines.append("## Removed by the person")

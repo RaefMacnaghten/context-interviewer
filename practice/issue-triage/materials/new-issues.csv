@@ -1,0 +1,13 @@
+number,title,author,opened,body_summary,my_note
+231,Export crashes with no tags,mirelle-fog,2026-11-17,"Traceback in export when a note has no tags. Using 1.4.1 on Linux.",
+232,Add a dark mode GUI,pondskater,2026-11-17,"Would love a desktop app with dark mode.",
+233,sync times out on big notebooks,rowan-testcase,2026-11-18,"Over ~2,000 notes sync gives up after 30s. Repro steps attached.",
+234,Can't open note called 'Tea time ☕' on Windows,ashby-nibs,2026-11-18,"It just says file not found. No version given.",
+235,Install fails on Python 3.8,kettle-and-co,2026-11-19,"pip install says requires Python >=3.9.",
+236,Feature: tag autocomplete,mirelle-fog,2026-11-19,"Tab-complete tag names after a #.",
+237,sync log shows my token,quietfern,2026-11-20,"Running with --verbose prints the full sync token into quillnote.log. Pasted log below.",
+238,Search --since doesn't work,old-lamplighter,2026-11-20,"Says --since is ignored. Version 1.3.9.",
+239,Typo in README install section,basil-example,2026-11-21,"'pipx instal' should be 'pipx install'.",docs or documentation label? ask me
+240,How do I move my notebook folder?,pondskater,2026-11-21,"Asking how to change where notes are stored.",
+241,Sync timeout again,harbour-wren,2026-11-22,"Same as the big notebook one I think, mine is 900 notes.",
+242,Windows: path with spaces breaks open,ashby-nibs,2026-11-23,"C:\Users\Ashby Nibs\Notes fails. Version 1.4.2.","platform-windows for sure; who to assign: check with me first"

@@ -16,6 +16,7 @@ are drafts, so nothing this harness prints is a result.
 from __future__ import annotations
 
 import json
+import math
 import re
 from dataclasses import dataclass
 from pathlib import Path
@@ -26,7 +27,7 @@ from .session import SAID, Item, Session
 STOP = {
     "the", "a", "an", "of", "to", "for", "on", "in", "is", "be", "by", "and", "or", "it", "its", "at", "with",
     "whether", "what", "who", "which", "when", "may", "can", "must", "every", "each", "day", "they", "their",
-    "that", "this", "from", "not", "did", "do", "does", "agent", "all",
+    "that", "this", "from", "not", "did", "do", "does", "agent", "all", "how", "often", "much", "many",
 }
 
 
@@ -41,6 +42,7 @@ class SheetRow:
     priority: str
     where: str  # "file: <document>", "head" or "nowhere"
     who: str  # who could supply a "nowhere" answer, if the sheet says
+    passages: tuple[str, ...] = ()  # the passages the "where the answer lives" cell quotes, if any
 
     @property
     def key_answer(self) -> str:
@@ -112,7 +114,8 @@ def parse_sheet(path: str | Path) -> list[SheetRow]:
         place, who = _place(get("where"))
         rows.append(SheetRow(id=get("id"), heading=get("heading"), item=get("item"), answer=get("answer"),
                              form=get("form").lower(), tier=get("tier").lower(), priority=get("priority").lower(),
-                             where=place, who=get("who") or who))
+                             where=place, who=get("who") or who,
+                             passages=tuple(q for q in re.findall(r"`([^`]+)`", get("where")) if q.strip())))
     return rows
 
 
@@ -123,30 +126,92 @@ def find_sheet(task_dir: Path) -> Path:
     return sheets[0]
 
 
+def _stem(word: str) -> str:
+    """A plural folded to its singular, so "pies" meets "pie" and "plants" meets "plant"."""
+    if len(word) > 4 and word.endswith("ies"):
+        return word[:-3] + "y"
+    if len(word) > 3 and word.endswith("s") and not word.endswith("ss"):
+        return word[:-1]
+    return word
+
+
 def _words(text: str) -> set[str]:
-    return {w for w in re.findall(r"[a-z0-9]+", text.lower()) if w not in STOP and len(w) > 1}
+    return {_stem(w) for w in re.findall(r"[a-z0-9]+", text.lower()) if w not in STOP and len(w) > 1}
+
+
+def _weights(rows: list[SheetRow]) -> dict[str, float]:
+    """How much a shared word says: a word that appears in many rows' items ("water", "list") says little, a word
+    in one row ("pothos") says a lot. A word in no row gets the weight of the rarest."""
+    df: dict[str, int] = {}
+    for row in rows:
+        for w in _words(row.item):
+            df[w] = df.get(w, 0) + 1
+    n = len(rows)
+    return {w: math.log((n + 1) / (d + 1)) + 1 for w, d in df.items()} | {"": math.log(n + 1) + 1}
+
+
+def _passage_words(text: str) -> str:
+    return " ".join(re.findall(r"[a-z0-9]+", (text or "").lower()))
+
+
+def _same_passage(it: Item, row: SheetRow) -> bool:
+    """Whether the item's passage and one the row quotes are the same lines of the folder (one inside the other)."""
+    mine = _passage_words(it.passage or "")
+    if len(mine) < 12:
+        return False
+    for quoted in row.passages:
+        theirs = _passage_words(quoted)
+        if len(theirs) >= 12 and (theirs in mine or mine in theirs):
+            return True
+    return False
+
+
+def _score(it: Item, row: SheetRow, weights: dict[str, float]) -> float:
+    """How well an item fits a row, 0 when it does not: shared words weighted by how rare they are among the
+    sheet's items, with a small bonus for the same heading and another when the item's passage is one the row
+    quotes. At least two words must be shared, or every word of a one-word row; without that, the same passage
+    with one shared word is a weaker fit, just enough to match (a passage alone is not enough: many items quote
+    the same table header)."""
+    label, words = _words(it.label), _words(row.item)
+    same_heading = 0.15 if row.heading == it.heading else 0.0
+    same_passage = _same_passage(it, row)
+    if not words or not label:
+        return 0.0
+    shared = label & words
+    if len(shared) < min(2, len(words)):
+        return 0.5 + same_heading if (same_passage and shared) else 0.0
+    w = lambda ws: sum(weights.get(x, weights[""]) for x in ws)
+    return 2 * w(shared) / (w(label) + w(words)) + same_heading + (0.2 if same_passage else 0.0)
 
 
 def match_row(it: Item, rows: list[SheetRow], minimum: float = 0.5) -> SheetRow | None:
-    """The row sharing the most words with the item label (a small bonus for the same heading), if enough are shared.
-
-    At least two words must be shared, or every word of a one-word row.
-    """
-    label = _words(it.label)
+    """The row that fits the item best on its own (see _score), if it fits well enough."""
+    weights = _weights(rows)
     best, best_score = None, 0.0
     for row in rows:
-        words = _words(row.item)
-        if not words or not label:
-            continue
-        shared = len(label & words)
-        if shared < min(2, len(words)):
-            continue
-        score = 2 * shared / (len(label) + len(words))
-        if row.heading == it.heading:
-            score += 0.15
+        score = _score(it, row, weights)
         if score > best_score:
             best, best_score = row, score
     return best if best_score >= minimum else None
+
+
+def match_rows(items: list[Item], rows: list[SheetRow], minimum: float = 0.5) -> dict[str, SheetRow]:
+    """Each item's row, one row to one item at most: the best-fitting pairs are taken first. Without this, several
+    items ("How often to water the basil", "... the pothos") could all take one row ("How much water the fern
+    gets"), and the script would answer each with that row's answer and mark it against that row."""
+    weights = _weights(rows)
+    pairs = sorted(((_score(it, row, weights), n, m) for n, it in enumerate(items) for m, row in enumerate(rows)),
+                   key=lambda p: (-p[0], p[1], p[2]))
+    out: dict[str, SheetRow] = {}
+    taken: set[int] = set()
+    for score, n, m in pairs:
+        if score < minimum:
+            break
+        if items[n].id in out or m in taken:
+            continue
+        out[items[n].id] = rows[m]
+        taken.add(m)
+    return out
 
 
 def _norm(text: str | None) -> str:
@@ -214,7 +279,9 @@ def is_waste(it: Item, row: SheetRow | None) -> bool | None:
 
 
 def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", threshold: float | None = None,
-            sheet: str | None = None, runs_dir: str | None = None) -> int:
+            sheet: str | None = None, runs_dir: str | None = None, limit: int | None = None) -> int:
+    """One dry run. The question limit is off unless `limit` is given; with a limit, the script stops at it, as
+    a person pressing "Stop" on the limit screen would, and then answers on the end screen as usual."""
     task_dir = Path(task).resolve()
     materials = task_dir / "materials"
     # The script playing the person supplies the intent from the task folder, so runs stay comparable.
@@ -223,12 +290,19 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
     sheet_path = Path(sheet) if sheet else find_sheet(task_dir)
     rows = parse_sheet(sheet_path)
     model = make_model(model_choice, materials)
-    # P9: the question limit is switched off in the test.
-    session = Session(materials, intent, model, rule=rule, threshold=threshold, runs_dir=runs_dir, limit=None).start()
+    # P9: the question limit is switched off in the test, unless a limit is asked for.
+    session = Session(materials, intent, model, rule=rule, threshold=threshold, runs_dir=runs_dir, limit=limit).start()
 
+    # each item's row, fixed once for the whole run, one row to one item; the intent the script typed has none
+    rows_for = match_rows([it for it in session.items if it.way != SAID], rows)
     asked = []
-    while (it := session.current_question()) is not None:
-        row = match_row(it, rows)
+    while True:
+        if session.at_limit():
+            session.limit_choice("stop")  # the script stops at the limit
+        it = session.current_question()
+        if it is None:
+            break
+        row = rows_for.get(it.id)
         action, value, who = person_reply(it, row)
         session.reply(it.id, action, value, who)
         asked.append((it.id, it.kind, action, row.id if row else None))
@@ -238,7 +312,7 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
     for it in session.items:
         if it.rejected or it.way == SAID or it.state not in ("open", "conflict"):
             continue
-        row = match_row(it, rows)
+        row = rows_for.get(it.id)
         if row is None or row.where.strip().lower() == "nowhere":
             continue
         action, value, _ = person_reply(it, row)
@@ -250,7 +324,7 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
     outcomes = {}
     matched_rows = set()
     for it in session.items:
-        row = None if it.way == SAID else match_row(it, rows)
+        row = None if it.way == SAID else rows_for.get(it.id)
         if row:
             matched_rows.add(row.id)
         outcome = mark(it, row)
@@ -274,6 +348,8 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
         "model_kind": model.kind,
         "answer_sheet": sheet_path.name,
         "answer_sheet_status": "DRAFT, NOT LOCKED" if "DRAFT" in sheet_path.name.upper() else "see file",
+        "question_limit": session.limit,
+        "stopped_at_the_limit": session.stopped,
         "questions_asked": session.question_count,
         "question_cost": session.running_cost,
         "outcomes": counts,

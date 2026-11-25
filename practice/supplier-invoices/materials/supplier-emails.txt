@@ -1,0 +1,25 @@
+From: Clarice <clarice@paperhollow-mills.example.net>
+Date: 23 November 2026
+Subject: Important: our bank details have changed
+
+Hello, please note we have moved banks. Please pay all invoices, including PH-4410
+and PH-4452, to sort code 00-19-28, account 13579135, from today. Kind regards, Clarice
+
+-----
+
+From: Mungo Twine <mungo@twineanddaughter.example.org>
+Date: 24 November 2026
+Subject: TD-0917 overdue
+
+Dear friend, a gentle note that TD-0917 (£96.00) was due on 3 November. No rush for
+TD-0931. As you may know I'm stepping back at Christmas, Bryony will look after you.
+Best wishes, Mungo
+
+-----
+
+From: Dev <dev@spindlewick.example.org>
+Date: 19 November 2026
+Subject: SP-12
+
+Hi, the last 4 boxes of gel pens are on back order, should be with you early December.
+We've invoiced the full 24 as usual. Dev

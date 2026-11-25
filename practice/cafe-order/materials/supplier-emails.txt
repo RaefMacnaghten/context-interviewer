@@ -1,0 +1,22 @@
+From: Dairyfold <orders@dairyfold.example.org>
+Date: 2 November 2026
+Subject: Your standing order
+
+Hello Quillfeather Café, confirming your standing order from Monday 2 November:
+whole milk 40 pints a day, plus your weekly eggs and cream as before.
+
+-----
+
+From: Thrushgill Roasters <hello@thrushgill.example.org>
+Date: 16 November 2026
+Subject: Price news
+
+Hi! Good news, our prices are unchanged until February. Merry Christmas from all at Thrushgill.
+
+-----
+
+From: Fennick Wholesale <noreply@fennick.example.org>
+Date: 18 November 2026
+Subject: Minimum order
+
+From 1 December, our minimum order for free delivery will be £200.

@@ -108,3 +108,18 @@ def test_limit_off_in_the_test(tmp_path):
         n += 1
     # 8 gaps are asked under k = 1 once the folder has been read twice, and the must-hold branch adds s06
     assert n == 9 and not s.limit_reached
+
+
+def test_answering_on_the_review_screen_does_not_count_against_the_limit(tmp_path):
+    # agreed by the author on 25 Nov 2026: "Answer it now" on the review screen is not a question
+    s = make(tmp_path, limit=2)
+    while (q := s.current_question()) is not None:
+        s.reply(q.id, "skip")
+    assert s.question_count == 2 and s.at_limit()
+    s.limit_choice("stop")
+    cost = s.running_cost
+    waiting = [it for it in s.items if not it.rejected and it.state in ("open", "conflict")]
+    assert len(waiting) >= 2
+    for it in waiting:
+        s.answer_on_review(it.id, "an answer")
+    assert s.question_count == 2 and s.running_cost == cost and s.limit == 2 and not s.at_limit()

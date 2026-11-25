@@ -5,7 +5,9 @@ let config = null;
 let view = null;
 let editing = null; // id of the item being edited
 let whyOpen = false; // the "why this question" panel
+let backAt = null; // the Back button: which earlier question is shown (an index into view.asked), or null
 const openSources = new Set(); // item ids whose source passage is expanded
+const hiddenStates = new Set(); // the brief filter: statuses whose items are hidden (display only)
 
 function el(tag, attrs = {}, ...children) {
   const node = document.createElement(tag);
@@ -35,17 +37,76 @@ async function api(path, body) {
 
 const STATE_GLYPH = { confirmed: "✓", assumed: "~", open: "?", conflict: "!", "not available here": "⊘",
   listed: "·", "looking again": "·", estimating: "·", rejected: "×" };
+// The words the person sees for three internal values ("must hold", "nice if possible", "not available here") come
+// from the server's one list (elicitagent/labels.py), so a rename is one edit there.
+function shown(word) {
+  return (config && config.labels && config.labels[word]) || word;
+}
+function shownLower(word) {
+  const w = shown(word);
+  return w === word ? w : w.toLowerCase();
+}
+
 function stateChip(state, text) {
-  const label = text || (state.charAt(0).toUpperCase() + state.slice(1));
+  const w = shown(state);
+  const label = text || (w.charAt(0).toUpperCase() + w.slice(1));
   return el("span", { class: `chip st-${stateClass(state)}` }, el("span", { class: "glyph", "aria-hidden": "true" }, STATE_GLYPH[state] || "·"), label);
 }
 
-// The step bar under the top bar: Folder, Reading, Interview, Review, Brief.
+// The step bar under the top bar: Folder, Reading, Interview, Review, Brief. Once a session is under way, each
+// completed stage is a button: it shows that stage read-only, and the current stage's button returns to it.
+let stageView = null; // the earlier stage being looked at, or null for the current one
 function renderSteps(on) {
   const names = ["Folder", "Reading", "Interview", "Review", "Brief"];
   const at = names.indexOf(on);
-  $("#steps").replaceChildren(...names.map((n, i) => el("span", { class: i < at ? "done" : i === at ? "on" : "", "aria-current": i === at ? "step" : null },
-    el("b", { "aria-hidden": "true" }, i < at ? "✓" : String(i + 1)), n)));
+  const live = Boolean(view && view.status === "ready");
+  const looking = live && stageView !== null && stageView !== on ? names.indexOf(stageView) : -1;
+  $("#steps").replaceChildren(...names.map((n, i) => {
+    const cls = [i < at ? "done" : i === at ? "on" : "", i === looking ? "looking" : ""].join(" ").trim();
+    const inner = [el("b", { "aria-hidden": "true" }, i < at ? "✓" : String(i + 1)), n];
+    if (live && i <= at) {
+      return el("button", { type: "button", class: cls, "aria-current": i === at ? "step" : null, "aria-pressed": i === looking ? "true" : null,
+        title: i === at ? "The stage you are at" : `Look back at the ${n.toLowerCase()} stage (read-only)`,
+        onclick: () => { stageView = i === at ? null : n; render(); } }, ...inner);
+    }
+    return el("span", { class: cls, "aria-current": i === at ? "step" : null }, ...inner);
+  }));
+}
+
+function currentStage() {
+  if (!view || view.status !== "ready") return view && view.status ? "Reading" : "Folder";
+  return view.finished ? "Brief" : (!view.question && !view.at_limit) ? "Review" : "Interview";
+}
+
+// An earlier stage, read-only, in place of the question card. Nothing changes; the brief in progress stays beside it.
+function renderStageView(pane, stage) {
+  pane.className = "panel q-pane stage-view";
+  const back = el("button", { class: "b pr", onclick: () => { stageView = null; render(); } }, `Back to the ${currentStage().toLowerCase()} stage`);
+  const head = el("div", { class: "ph" }, el("span", {}, `${stage}: looking back`), el("span", { class: "sp" }), el("span", { class: "ro" }, "Read-only"));
+  const body = el("div", { class: "pb" });
+  if (stage === "Folder") {
+    const limit = view.limit_at_start === null ? "No limit" : `${view.limit_at_start} ${view.limit_at_start === 1 ? "question" : "questions"}`;
+    body.append(el("dl", { class: "kv" }, [
+      ["What you want the agent to do", view.intent || "(left empty: the goal comes from the folder)"],
+      ["Folder", view.folder], ["Rule", view.rule_label + (view.threshold !== null ? `, ${view.threshold}` : "")],
+      ["Question limit", limit], ["Model", view.model_kind === "simulated" ? "Simulated" : view.model],
+      ["Read", view.documents.join(", ") || "nothing"],
+      ["Skipped", view.skipped.length ? view.skipped.map((x) => `${x.name} (${x.reason})`).join("; ") : "nothing"],
+    ].flatMap(([k, v]) => [el("dt", {}, k), el("dd", {}, v)])));
+  } else if (stage === "Reading") {
+    const steps = el("ol", { class: "read-steps" }, view.progress.steps.map((st) => el("li", { class: `read-step ${st.state}` },
+      el("span", { class: "read-mark", "aria-hidden": "true" }, st.state === "done" ? "✓" : ""),
+      el("div", { class: "read-body" }, el("div", { class: "read-label" }, el("span", {}, st.label),
+        st.summary ? el("span", { class: "read-count" }, `${st.summary}${st.seconds !== null ? ` · ${Math.floor(st.seconds)} s` : ""}`) : null)))));
+    body.append(steps);
+  } else if (stage === "Interview") {
+    body.append(view.asked.length ? el("ol", { class: "asked-list" }, view.asked.map((a) => el("li", {},
+      el("div", { class: "asked-q" }, a.text), el("div", { class: "small" }, replyWords(a)))))
+      : el("p", { class: "small" }, "No question was asked."));
+  } else if (stage === "Review") {
+    renderEndScreen(body, true);
+  }
+  pane.append(head, body, el("div", { class: "pb brow" }, back));
 }
 
 function stateClass(state) {
@@ -312,14 +373,29 @@ async function reply(action, value, who) {
 function sourceView(key, documentName, passage, context, compact = false) {
   if (!documentName || !passage || documentName === "the person") return null;
   const open = openSources.has(key);
+  // Opening or closing a source changes only this box, in place: the rest of the page is not rebuilt, so nothing
+  // moves and the page does not scroll.
   const toggle = el("button", { class: "source-toggle", "aria-expanded": open ? "true" : "false",
-    onclick: () => { open ? openSources.delete(key) : openSources.add(key); render(); } },
+    onclick: () => {
+      open ? openSources.delete(key) : openSources.add(key);
+      const keyboard = toggle.matches(":focus-visible"); // keep the keyboard's place; a mouse click needs no ring
+      const again = sourceView(key, documentName, passage, context, compact);
+      wrap.replaceWith(again);
+      if (keyboard) again.querySelector(".source-toggle").focus({ preventScroll: true });
+    } },
     `${open ? "Hide" : "Show"} source: ${documentName}`);
-  const wrap = el("div", { class: "source" }, toggle);
+  const wrap = el("div", { class: "source" });
   if (!open) {
-    if (!compact) wrap.append(el("div", { class: "source-quote" }, `"${passage}"`));
+    if (compact) {
+      // in the brief in progress: a short excerpt beside the link, one line; the whole passage on expand
+      wrap.append(el("div", { class: "source-line" }, toggle,
+        el("span", { class: "source-excerpt", title: passage }, `"${excerpt(passage)}"`)));
+    } else {
+      wrap.append(toggle, el("div", { class: "source-quote" }, `"${passage}"`));
+    }
     return wrap;
   }
+  wrap.append(toggle);
   const box = el("div", { class: "source-context" });
   if (context) {
     const n0 = context.line - context.before.length;
@@ -331,6 +407,15 @@ function sourceView(key, documentName, passage, context, compact = false) {
   }
   wrap.append(box);
   return wrap;
+}
+
+// The start of a passage, cut at a word and marked with an ellipsis when it is longer than about a line.
+function excerpt(passage, max = 80) {
+  const flat = passage.replace(/\s+/g, " ").trim();
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:.]+$/, "")}…`;
 }
 
 function pct(p) { return `${Math.round(p * 100)}%`; }
@@ -398,9 +483,8 @@ function itemControls(it) {
   if (it.rejected) {
     return el("div", { class: "ctl" }, el("button", { class: "cb", onclick: () => control(it.id, "restore") }, "Restore"));
   }
-  const canConfirm = it.value && it.state !== "conflict" && !(it.state === "confirmed" && it.source === "person");
   return el("div", { class: "ctl" },
-    canConfirm ? el("button", { class: "cb", title: "The value is right", "aria-label": `Confirm: ${it.label}`, onclick: () => control(it.id, "confirm") }, "Confirm") : null,
+    it.can_confirm ? el("button", { class: "cb", title: "The value is right", "aria-label": `Confirm: ${it.label}`, onclick: () => control(it.id, "confirm") }, "Confirm") : null,
     el("button", { class: "cb", title: "Change the value", "aria-label": `Edit: ${it.label}`, onclick: () => { editing = it.id; renderItems(); } }, "Edit"),
     el("button", { class: "cb", title: "This does not belong in the brief", "aria-label": `Reject: ${it.label}`, onclick: () => control(it.id, "reject") }, "Reject"),
   );
@@ -465,15 +549,20 @@ function render() {
     renderBrief();
     return;
   }
-  renderSteps(view.finished ? "Brief" : (!view.question && !view.at_limit) ? "Review" : "Interview");
+  renderSteps(currentStage());
   $("#progress-pane").hidden = false;
   renderQuestion();
   renderProgress();
   renderItems();
   renderBrief();
+  // bring the line the question will fill into view only when a new question comes up, never on other clicks
+  // (Show source, Confirm, Edit, Reject), which would otherwise move the page under the person's pointer
   const current = document.querySelector(".items-list li.current");
-  if (current) current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  const qid = view.question && !view.finished ? view.question.item : null;
+  if (current && qid !== scrolledFor) current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  scrolledFor = qid;
 }
+let scrolledFor = null; // the question whose line was last brought into view
 
 // P7 and P8: at the limit, say how much more seems needed, and let the person continue or stop.
 function renderLimit(pane) {
@@ -503,7 +592,7 @@ async function limitChoice(action) {
 }
 
 // P10: one end screen. Review everything once, see what waits, then write the brief.
-function renderEndScreen(pane) {
+function renderEndScreen(pane, readOnly = false) {
   const live = view.items.filter((i) => !i.rejected);
   const waiting = live.filter((i) => i.state === "open" || i.state === "conflict");
   const assumed = live.filter((i) => i.state === "assumed");
@@ -514,24 +603,26 @@ function renderEndScreen(pane) {
     el("ul", { class: "review-list" }, items.map((it) => el("li", { class: `rv st-${stateClass(state || it.state)}` },
       el("a", { href: `#item-${it.id}`, onclick: (ev) => { ev.preventDefault(); document.getElementById(`item-${it.id}`).scrollIntoView({ block: "center", behavior: "smooth" }); } }, it.label),
       it.value && it.state === "assumed" ? el("span", { class: "muted" }, `: ${it.value}`) : null,
-      it.state === "open" || it.state === "conflict" ? el("span", { class: `tag ${it.must_hold_or_nice === "must hold" ? "must" : "nice"} rv-tag` }, it.must_hold_or_nice) : null,
+      it.state === "open" || it.state === "conflict" ? el("span", { class: `tag ${it.must_hold_or_nice === "must hold" ? "must" : "nice"} rv-tag` }, shown(it.must_hold_or_nice)) : null,
       extra ? extra(it) : null)))) : null;
-  pane.className = "panel q-pane";
-  pane.append(
-    el("div", { class: "ph" }, el("span", { class: "glyph", "aria-hidden": "true" }, "◉"), "Review before the brief is written"),
+  if (!readOnly) pane.className = "panel q-pane";
+  pane.append(...[
+    readOnly ? null : el("div", { class: "ph" }, el("span", { class: "glyph", "aria-hidden": "true" }, "◉"), "Review before the brief is written"),
     el("div", { class: "pb" }, ...[
       // the "Still open" block is shown once, at the top of the brief in progress beside this screen
-      el("p", {}, `No more questions. Asked ${view.question_count}. Check the brief in progress once: confirm, edit or reject anything. Then write it.`),
-      section("Waiting", "Not settled. Answer any you can here; the brief passes the rest to the agent as \"ask before you do this\".", waiting, null, reviewAnswer),
-      section("Guessed and marked", "The tool guessed these. Confirm or edit any you can.", assumed, "assumed"),
-      section("Not available here", "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, "not available here", (it) => {
+      readOnly
+        ? el("p", {}, `Asked ${view.question_count}. What is still waiting, guessed or for someone else${view.finished ? ", as the brief now stands" : ""}.`)
+        : el("p", {}, `No more questions. Asked ${view.question_count}. Check the brief in progress once: confirm, edit or reject anything. Then write it.`),
+      section("Waiting", readOnly ? "Not settled: the brief passes these to the agent as \"ask before you do this\"." : "Not settled. Answer any you can here; the brief passes the rest to the agent as \"ask before you do this\".", waiting, null, readOnly ? null : reviewAnswer),
+      section("Guessed and marked", readOnly ? "The tool guessed these." : "The tool guessed these. Confirm or edit any you can.", assumed, "assumed"),
+      section(shown("not available here"), readOnly ? "You could not answer these, and the folder does not hold them." : "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, "not available here", readOnly ? (it) => (it.who_could ? el("span", { class: "muted" }, ` · ${it.who_could}`) : null) : (it) => {
         const box = el("input", { type: "text", value: it.who_could || "", placeholder: "Who could?", "aria-label": `Who could answer: ${it.label}` });
         box.addEventListener("change", () => control(it.id, "who could", box.value));
         return box;
       }),
-      el("button", { class: "b pr big", onclick: finish }, "Write the brief"),
+      readOnly ? null : el("button", { class: "b pr big", onclick: finish }, "Write the brief"),
     ].filter(Boolean)),
-  );
+  ].filter(Boolean));
 }
 
 // A very small Markdown view for the brief: headings, lists, bold, italics, quotes. Text is escaped first.
@@ -561,7 +652,7 @@ function renderProgress() {
   const order = ["confirmed", "assumed", "open", "conflict", "not available here"];
   $("#progress-pane").replaceChildren(el("div", { class: "pb" }, ...[
     el("div", {}, `Questions asked: ${view.question_count}${view.limit !== null ? ` of ${view.limit}` : ""} · ${view.questions_left} waiting`),
-    el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => stateChip(s, `${counts[s]} ${s}`))),
+    el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => stateChip(s, `${counts[s]} ${shownLower(s)}`))),
     el("div", {}, `Read ${view.documents.length} documents: `, ...view.documents.flatMap((d, i) => [i ? " " : "", el("span", { class: "src" }, d)])),
     view.skipped.length ? el("div", {}, `Not read: ${view.skipped.map((s) => `${s.name} (${s.reason})`).join("; ")}`) : null,
   ].filter(Boolean)));
@@ -572,6 +663,11 @@ function renderQuestion() {
   document.querySelectorAll("aside.left > .why").forEach((n) => n.remove());
   pane.replaceChildren();
   pane.className = "panel q-pane";
+  if (stageView !== null && stageView !== currentStage()) {
+    renderStageView(pane, stageView);
+    return;
+  }
+  stageView = null;
   if (view.finished) {
     pane.append(
       el("div", { class: "ph" }, el("span", { class: "glyph ok", "aria-hidden": "true" }, "✓"), "The brief is written"),
@@ -584,13 +680,20 @@ function renderQuestion() {
     );
     return;
   }
+  if (backAt !== null && view.asked && view.asked[backAt]) {
+    renderRevisit(pane, view.asked[backAt]);
+    return;
+  }
+  backAt = null;
   if (view.at_limit) {
     renderLimit(pane);
+    pane.querySelector(".ph").append(backButton());
     return;
   }
   const q = view.question;
   if (!q) {
     renderEndScreen(pane);
+    pane.querySelector(".ph").append(backButton());
     return;
   }
   pane.className = "panel q-pane q-card";
@@ -627,9 +730,10 @@ function renderQuestion() {
       el("span", { class: "q-num" }, `Question ${view.question_count + 1}`),
       el("span", { class: "kind" }, `${q.kind} question`),
       el("span", { class: "sp" }),
+      backButton(),
       el("button", { class: `b sm why-toggle ${whyOpen ? "on" : ""}`, "aria-expanded": whyOpen ? "true" : "false", onclick: () => { whyOpen = !whyOpen; render(); } },
         whyOpen ? "Hide why" : "Why this question?")),
-    el("p", { class: "question-text qq" }, q.text),
+    ...questionLines(q),
     el("p", { class: "reason q-why" }, q.reason),
     item ? sourceView(`q-${item.id}`, item.document, item.passage, item.context) : null,
     clash,
@@ -646,6 +750,76 @@ function renderQuestion() {
     pane.after(box);
     renderWhy(box, q.item);
   }
+}
+
+// ---------------------------------------------------------------- Back: an earlier question, its reply changeable
+
+// The question as three parts: the question itself, large; then why it is asked and what to answer, smaller.
+function questionLines(q) {
+  const p = q.parts || { ask: q.text, why: "", form: "" };
+  return [el("p", { class: "question-text qq" }, p.ask),
+    p.why || p.form ? el("p", { class: "q-detail" }, el("span", { class: "q-why-files" }, p.why), " ", el("span", { class: "q-form" }, p.form)) : null]
+    .filter(Boolean);
+}
+
+function backButton() {
+  if (!view.asked || !view.asked.length) return null;
+  return el("button", { class: "b sm back", title: "See the question before, with the reply you gave. Changing it does not count as a new question.",
+    onclick: () => { backAt = backAt === null ? view.asked.length - 1 : Math.max(0, backAt - 1); whyOpen = false; render(); } }, "← Back");
+}
+
+function replyWords(a) {
+  if (a.reply === "answer") return `You answered: "${a.value}"`;
+  if (a.reply === "skip") return "You skipped it.";
+  return a.who ? `You could not answer it, and said to ask ${a.who}.` : "You could not answer it.";
+}
+
+async function revise(a, action, value, who) {
+  try {
+    view = await api(`/api/session/${view.id}/revise`, { item: a.item, action, value, who });
+  } catch (e) {
+    alert(e.message);
+    return;
+  }
+  backAt = null; // the reply is replaced: back to where the interview had got to
+  render();
+}
+
+function renderRevisit(pane, a) {
+  pane.className = "panel q-pane q-card revisit";
+  const n = view.asked.length;
+  const answerBox = el("input", { type: "text", value: a.reply === "answer" ? a.value : "", placeholder: "Type your answer", "aria-label": "Your answer" });
+  const whoBox = el("input", { type: "text", value: a.who || "", placeholder: "Who could? (optional)", "aria-label": "Who could answer this? (optional)" });
+  const opts = el("div", { class: "opts" });
+  const picked = (v) => a.reply === "answer" && a.value === v;
+  if (a.kind === "confirm" && a.confirm_value) {
+    opts.append(el("button", { class: `opt ${picked(a.confirm_value) ? "chosen" : ""}`, onclick: () => revise(a, "answer", a.confirm_value) },
+      el("span", { class: "rd", "aria-hidden": "true" }), el("span", {}, "Yes, that is right")));
+  }
+  const choices = a.kind === "choose" ? (a.sources && a.sources.length ? a.sources.map((src) => src.value) : a.candidates) : [];
+  for (const c of [...new Set(choices)]) {
+    opts.append(el("button", { class: `opt ${picked(c) ? "chosen" : ""}`, onclick: () => revise(a, "answer", c) },
+      el("span", { class: "rd", "aria-hidden": "true" }), el("span", {}, c)));
+  }
+  pane.append(...[
+    el("div", { class: "q-head" },
+      el("span", { class: "q-num" }, `Question ${a.number} of ${n} asked`),
+      el("span", { class: "kind" }, `${a.kind} question`),
+      el("span", { class: "sp" }),
+      a.number > 1 ? el("button", { class: "b sm", onclick: () => { backAt -= 1; render(); } }, "← Earlier") : null,
+      a.number < n ? el("button", { class: "b sm", onclick: () => { backAt += 1; render(); } }, "Later →") : null),
+    el("p", { class: "callout quiet revisit-note" }, "You are looking back. Change the reply if you want to: it replaces the one you gave and does not count as a new question."),
+    ...questionLines(a),
+    el("p", { class: "reason q-why" }, a.reason),
+    el("p", { class: "reply-now" }, replyWords(a)),
+    opts.childNodes.length ? opts : null,
+    el("div", { class: "typed" }, answerBox, el("button", { class: "b", onclick: () => revise(a, "answer", answerBox.value) }, a.reply === "answer" ? "Change the answer" : "Answer")),
+    el("div", { class: "brow replies" },
+      a.reply !== "skip" ? el("button", { class: "b", onclick: () => revise(a, "skip") }, "↷ Skip instead") : null),
+    el("div", { class: "cant-answer" },
+      el("button", { class: "b", onclick: () => revise(a, "I can't answer this", null, whoBox.value) }, "⊘ I can't answer this"), whoBox),
+    el("div", { class: "brow" }, el("button", { class: "b pr", onclick: () => { backAt = null; render(); } }, "Back to where you were")),
+  ].filter(Boolean));
 }
 
 // Display only: the "Still open" block at the top of the brief in progress, on the main screen and beside the end
@@ -673,7 +847,7 @@ function stillOpenBlock() {
       stateChip(it.state),
       el("div", {},
         el("a", { href: `#item-${it.id}`, onclick: (ev) => { ev.preventDefault(); goToItem(it.id); } }, it.label),
-        el("div", { class: "so-where" }, `${it.heading} · ${it.must_hold_or_nice}`))))));
+        el("div", { class: "so-where" }, `${it.heading} · ${shown(it.must_hold_or_nice)}`))))));
   }
   return box;
 }
@@ -692,13 +866,14 @@ function renderItems() {
   const body = el("div", { class: "pb" });
   pane.append(body);
   body.append(stillOpenBlock());
-  if (!reading) body.append(el("div", { class: "legend" }, order.filter((s) => counts[s]).map((s) => stateChip(s, `${counts[s]} ${s}`))));
+  if (!reading) body.append(briefFilter(order, counts));
   if (!view.intent && !reading) body.append(el("p", { class: "callout quiet doc-request" }, "You did not say what you want the agent to do, so the goal comes from the folder."));
   for (const heading of view.headings) {
-    const items = view.items.filter((i) => i.heading === heading);
-    body.append(el("div", { class: "sec-h" }, heading, el("span", { class: "cnt" }, items.length ? String(items.length) : "")));
+    const all = view.items.filter((i) => i.heading === heading);
+    const items = reading ? all : all.filter((i) => !hiddenStates.has(i.rejected ? "rejected" : i.state));
+    body.append(el("div", { class: "sec-h" }, heading, el("span", { class: "cnt" }, all.length ? String(all.length) : "")));
     if (!items.length) {
-      body.append(el("div", { class: "empty-row" }, reading ? "Nothing yet." : "Nothing here yet."));
+      body.append(el("div", { class: "empty-row" }, all.length ? `${all.length} hidden by the filter.` : reading ? "Nothing yet." : "Nothing here yet."));
       continue;
     }
     const list = el("ul", { class: "items-list" });
@@ -708,17 +883,17 @@ function renderItems() {
       const said = it.way === "said by the person";
       const tags = [
         el("span", { class: `tag ${said ? "you" : it.stated_or_inferred}` }, said ? "your intent" : it.stated_or_inferred),
-        el("span", { class: `tag ${it.must_hold_or_nice === "must hold" ? "must" : "nice"}` }, it.must_hold_or_nice),
-        it.answered_on_review ? el("span", { class: "tag way" }, "answered on review")
-          : it.way ? el("span", { class: "tag way" }, it.way) : null,
+        el("span", { class: `tag ${it.must_hold_or_nice === "must hold" ? "must" : "nice"}` }, shown(it.must_hold_or_nice)),
+        it.way_tag ? el("span", { class: "tag way" }, it.way_tag) : null,
         it.document ? el("span", { class: "src" }, it.document) : null,
-        it.who_could ? el("span", { class: "tag" }, `who could: ${it.who_could}`) : null,
         it.source === "person" && !said ? el("span", { class: "src you" }, "settled by you") : null,
         it.id === currentId ? el("span", { class: "now-tag" }, "this question") : null,
       ].filter(Boolean);
       list.append(el("li", { class: classes, id: `item-${it.id}` },
         stateChip(state, it.rejected ? "Rejected" : null),
-        el("div", { class: "tx" }, el("span", { class: "item-label" }, it.label), it.value && it.state !== "conflict" ? el("span", { class: "item-value" }, `: ${it.value}`) : null),
+        el("div", { class: "tx" }, el("span", { class: "item-label" }, it.label),
+          it.value && it.state !== "conflict" ? el("span", { class: "item-value" }, `: ${it.value}`)
+            : state === "not available here" && it.who_could ? el("span", { class: "item-value who" }, `: ask ${it.who_could}`) : null),
         editing === it.id || reading ? null : itemControls(it),
         el("div", { class: "mt" }, tags),
         el("div", { class: "below" }, ...[
@@ -726,6 +901,7 @@ function renderItems() {
             (it.sources.some((src) => src.person) ? "Your intent and the folder disagree: " : "Documents disagree: ")
               + it.sources.map((src) => `${src.value} (${src.person ? "you" : src.document})`).join(" vs ")) : null,
           it.passage ? sourceView(`i-${it.id}`, it.document, it.passage, it.context, true) : null,
+          it.origin ? el("div", { class: "origin" }, it.origin) : null,
           ...(it.sources || []).map((src, n) => sourceView(`i-${it.id}-${n}`, src.document, src.passage, src.context, true)),
           editing === it.id ? editBox(it) : null,
         ].filter(Boolean)),
@@ -733,6 +909,20 @@ function renderItems() {
     }
     body.append(list);
   }
+}
+
+// The filter on the brief in progress: each count chip shows or hides the items in that status, and "Hide
+// confirmed" is a switch for the commonest case. Display only: nothing about the items changes.
+function briefFilter(order, counts) {
+  const toggle = (state) => { hiddenStates.has(state) ? hiddenStates.delete(state) : hiddenStates.add(state); renderItems(); };
+  const chips = order.filter((s) => counts[s]).map((s) => el("button", {
+    class: `chip-btn ${hiddenStates.has(s) ? "off" : ""}`, type: "button", "aria-pressed": hiddenStates.has(s) ? "false" : "true",
+    title: hiddenStates.has(s) ? "Hidden: press to show" : "Shown: press to hide", onclick: () => toggle(s),
+  }, stateChip(s, `${counts[s]} ${shownLower(s)}`)));
+  const hideConfirmed = el("input", { type: "checkbox", checked: hiddenStates.has("confirmed"), onchange: () => toggle("confirmed") });
+  return el("div", { class: "filter-row" },
+    el("div", { class: "legend", role: "group", "aria-label": "Show or hide items by status" }, chips),
+    counts.confirmed ? el("label", { class: "switch" }, hideConfirmed, el("span", {}, "Hide confirmed")) : null);
 }
 
 function renderBrief() {

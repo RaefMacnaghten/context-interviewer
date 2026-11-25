@@ -115,3 +115,108 @@ def test_waste_is_a_question_the_folder_could_have_answered():
     clash = item("Clash: when pack down ends")
     clash.asked = True
     assert is_waste(clash, match_row(clash, r)) is False  # the tool always asks a clash
+
+
+def _summary(runs_dir):
+    import json
+
+    return json.loads(next(Path(runs_dir).rglob("dry-run-summary.json")).read_text())
+
+
+def test_the_dry_run_has_no_limit_by_default(tmp_path):
+    from elicitagent.harness import dry_run
+
+    dry_run(str(REPO / "tasks" / "rota"), model_choice="simulated", runs_dir=str(tmp_path))
+    s = _summary(tmp_path)
+    assert s["question_limit"] is None and not s["stopped_at_the_limit"] and s["questions_asked"] > 3
+
+
+def test_with_a_limit_the_script_stops_at_it(tmp_path):
+    from elicitagent.harness import dry_run
+    from elicitagent.trace import read_trace
+
+    dry_run(str(REPO / "tasks" / "rota"), model_choice="simulated", runs_dir=str(tmp_path), limit=3)
+    s = _summary(tmp_path)
+    assert s["question_limit"] == 3 and s["stopped_at_the_limit"] and s["questions_asked"] == 3
+    trace = read_trace(next(Path(tmp_path).rglob("gap-trace.jsonl")))
+    assert [l["event"] for l in trace].count("stop") == 1
+    # answering on the end screen afterwards is not a question: the count stays at the limit
+    assert max(l["question_count"] for l in trace) == 3
+
+
+def test_the_command_line_passes_the_limit(tmp_path):
+    from elicitagent.cli import main
+
+    assert main(["dry-run", str(REPO / "tasks" / "rota"), "--model", "simulated", "--runs-dir", str(tmp_path),
+                 "--limit", "2"]) == 0
+    assert _summary(tmp_path)["questions_asked"] == 2
+
+
+# ---------------------------------------------------------------- matching items to rows, one row to one item
+
+def _row(rid, heading, label, where="Only in the person's head", answer="x"):
+    from elicitagent.harness import SheetRow
+    import re as _re
+
+    return SheetRow(id=rid, heading=heading, item=label, answer=answer, form="exact", tier="open",
+                    priority="must hold", where="head", who="", passages=tuple(_re.findall(r"`([^`]+)`", where)))
+
+
+PLANTS = [
+    _row("P1", "Rules", "How much water the fern gets", answer="A quarter of a jug"),
+    _row("P2", "Rules", "Basil"), _row("P3", "Rules", "Aloe"), _row("P4", "Rules", "Calathea"),
+    _row("P5", "Rules", "When the list is sent"), _row("P6", "Rules", "Mince pie supplier"),
+    _row("P7", "Rules", "Mince pies, whether to order", where="notes.md: `which supplier: check with me first`"),
+    _row("P8", "Rules", "Orders are final", where="terms.md: `Once an order is confirmed it can't be changed or cancelled.`"),
+    _row("P9", "Rules", "Minimum order for free delivery"),
+]
+
+
+def test_one_row_is_matched_to_one_item_at_most():
+    # seen in a practice run: nine items ("How often to water the basil", "... the pothos") all took the fern's row,
+    # and the script answered each with the fern's answer and marked it correct
+    from elicitagent.harness import match_rows
+
+    labels = ["How much water the fern gets", "How often to water the basil", "How often to water the pothos",
+              "How often to water the aloe", "How often to water the calathea", "How much water the fern gets"]
+    items = [item(l, heading="Rules") for l in labels]
+    for n, it in enumerate(items):
+        it.id = f"i{n}"
+    got = {k: v.id for k, v in match_rows(items, PLANTS).items()}
+    assert got == {"i0": "P1", "i1": "P2", "i3": "P3", "i4": "P4"}  # the pothos has no row; the repeat gets none
+    assert list(got.values()).count("P1") == 1
+
+
+def test_common_words_count_for_less_than_rare_ones():
+    from elicitagent.harness import match_rows
+
+    pothos = item("How often to water the pothos", heading="Rules")
+    assert match_rows([pothos], PLANTS) == {}  # "how" and "water" alone do not make it the fern's row
+
+
+def test_a_plural_meets_its_singular():
+    from elicitagent.harness import match_rows
+
+    pies = item("Supplier for mince pies", heading="Rules")
+    assert match_rows([pies], PLANTS)["x"].id == "P6"
+
+
+def test_the_same_quoted_passage_counts():
+    from elicitagent.harness import match_rows
+
+    final = item("Changes to a confirmed order", heading="Rules")
+    final.passage = "Once an order is confirmed it can't be changed or cancelled."
+    assert match_rows([final], PLANTS)["x"].id == "P8"  # not the minimum order row, which shares "order"
+    final.passage = None
+    assert match_rows([final], PLANTS) == {}
+    # a passage alone, with no word in common, is not enough
+    other = item("Spending cap", heading="Rules")
+    other.passage = "Once an order is confirmed it can't be changed or cancelled."
+    assert match_rows([other], PLANTS) == {}
+
+
+def test_the_sheet_reader_keeps_the_quoted_passages():
+    r = {row.id: row for row in rows()}
+    assert r["R23"].passages and r["R23"].passages[0].startswith("Setup starts at 12:00")
+    assert r["R68"].passages == ("The caretaker will send the alarm code for locking up nearer the time.",)
+    assert r["R03"].passages == ()  # a row whose cell quotes nothing

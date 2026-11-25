@@ -78,9 +78,9 @@ def test_end_screen_who_can_supply_is_traced_and_in_the_brief(s):
     s.control(alarm.id, "who could", "the hall caretaker")
     assert last(s)["event"] == "who could" and last(s)["value"] == "the hall caretaker"
     text = s.finish().read_text()
-    unavailable = text.split("## Not available here")[1].split("## ")[0]
+    unavailable = text.split("## Ask someone else")[1].split("## ")[0]
     assert "Hall alarm code" in unavailable and "Not available: ask the hall caretaker before acting." in unavailable
-    ask_first = text.split("## Ask first")[1].split("## Not available here")[0]
+    ask_first = text.split("## Ask first")[1].split("## Ask someone else")[0]
     assert "Kit Inventa" in ask_first  # skipped, so still waiting
 
 
@@ -99,3 +99,50 @@ def test_source_context_is_given_for_items_and_clash_sources(s):
     assert item["context"] and item["context"]["match"]
     clash = next(i for i in v["items"] if i["sources"])
     assert all(src["context"] for src in clash["sources"])
+
+
+def test_an_item_nobody_here_can_answer_shows_its_status_once(tmp_path):
+    # seen by the author: on a "not available here" item the same words appeared as the status and as the
+    # how-it-was-settled tag
+    s = Session(ROTA, "", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, limit=None).start()
+    q = s.current_question()
+    s.reply(q.id, "I can't answer this", who="the caretaker")
+    view = next(v for v in s.view()["items"] if v["id"] == q.id)
+    assert view["state"] == "not available here" and view["way_tag"] is None
+    other = next(v for v in s.view()["items"] if v["way"] == "read a file (first look)")
+    assert other["way_tag"] == "read a file (first look)"
+    js = (Path(__file__).resolve().parent.parent / "elicitagent" / "web" / "app.js").read_text()
+    assert "it.way_tag ?" in js and 'class: "tag way" }, it.way)' not in js
+
+
+def test_a_confirmed_item_has_no_confirm_button(tmp_path):
+    # seen by the author on "Format the rota is delivered in": a confirmed item still showed Confirm
+    s = Session(ROTA, "", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, limit=None).start()
+    views = {v["id"]: v for v in s.view()["items"]}
+    from_file = [v for v in views.values() if v["state"] == "confirmed"]
+    assert from_file and not any(v["can_confirm"] for v in from_file)
+    guessed = [v for v in views.values() if v["state"] == "assumed"]
+    assert guessed and all(v["can_confirm"] for v in guessed)
+    s.control(guessed[0]["id"], "confirm")
+    assert not next(v for v in s.view()["items"] if v["id"] == guessed[0]["id"])["can_confirm"]
+    assert not any(v["can_confirm"] for v in s.view()["items"] if v["state"] == "conflict")
+    js = (Path(__file__).resolve().parent.parent / "elicitagent" / "web" / "app.js").read_text()
+    assert "it.can_confirm ?" in js
+
+
+def test_every_item_says_where_it_came_from(tmp_path):
+    # seen by the author: "Qualified first aider after 18:00" (inferred, must hold) had no source link
+    s = Session(ROTA, "the rota", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, limit=None).start()
+    for v in s.view()["items"]:
+        shows_passage = bool(v["sources"]) or bool(v["document"] and v["passage_found"])
+        assert shows_passage or v["origin"], v["label"]
+        assert not (shows_passage and v["origin"])
+    it = next(i for i in s.items if not i.sources and not i.document and i.way != "said by the person")
+    assert s.origin(it) == "Not in any file: worked out from the folder as a whole and what you typed."
+    it.document = "volunteers.csv"
+    it.passage_found = False
+    assert s.origin(it) == "Not quoted in any file: worked out from volunteers.csv."
+    said = Session(ROTA, (ROTA.parent / "intent.txt").read_text(), SimulatedModel.for_folder(ROTA),
+                   runs_dir=tmp_path, limit=None).start()
+    typed = [i for i in said.items if i.way == "said by the person"]
+    assert typed and said.origin(typed[0]) == "From what you typed on the start page."

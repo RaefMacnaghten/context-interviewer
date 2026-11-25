@@ -16,6 +16,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlparse
 
 from .asktable import AskTable
+from .labels import DISPLAY
 from .documents import SURVEY_LIMIT, TooBig, survey
 from .models import ModelError, make_model, scrub
 from .session import REPO_ROOT, Session
@@ -139,6 +140,7 @@ class Handler(BaseHTTPRequestHandler):
                     "key_present": bool(os.environ.get("ANTHROPIC_API_KEY")),
                     "default_model": self.default_model,
                     "limit_start": table.limit_start,
+                    "labels": DISPLAY,
                 }
             )
         if path == "/api/tree":
@@ -211,6 +213,8 @@ class Handler(BaseHTTPRequestHandler):
                     s.limit_choice(body["action"])
                 elif action == "item":
                     s.control(body["item"], body["action"], body.get("value"))
+                elif action == "revise":
+                    s.revise(body["item"], body["action"], body.get("value"), body.get("who"))
                 elif action == "review":
                     s.answer_on_review(body["item"], body.get("value"))
                 elif action == "finish":

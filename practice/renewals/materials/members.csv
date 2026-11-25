@@ -1,0 +1,19 @@
+id,name,email,type,joined,expires,paid_until,auto_renew,contact_pref,notes
+101,Norbert Fieldfare,norbert.f@example.org,adult,2019-12-01,2026-12-31,2025-12-31,no,email,paid cash at a walk?
+102,Edna Stile,edna.stile@example.org,concession,2015-03-01,2026-12-31,2025-12-31,no,via Fenella,
+103,Wilf Gatepost,wilf@example.org,adult,2021-12-01,2026-12-31,2025-12-31,yes,email,wants to switch to family
+104,Hattie Brook,hattie.brook@example.org,adult,2024-06-01,,2025-06-30,no,,
+105,Marjorie Tally,treasurer@hollowmere.example.org,adult,2010-01-01,2027-01-31,2027-01-31,no,email,treasurer
+106,Cedric Stoat,cedric.stoat@example.org,family,2022-12-01,2026-12-31,2026-12-31,yes,email,
+107,Primrose Ditch,primrose@example.org,concession,2020-12-01,2026-12-31,2025-12-31,no,email,
+108,Owain Pike,o.pike@example.org,adult,2023-11-01,2026-11-30,2025-11-30,no,email,
+109,Lettice Moss,lettice.moss@example.org,adult,2018-12-01,2026-12-31,2025-12-31,no,email to daughter,
+110,Barnaby Sloe,barnaby.sloe@example.org,adult,2025-12-01,2026-12-31,2025-12-31,yes,email,
+111,Ivy Coppice,ivy.c@example.org,adult,2016-12-01,2026-12-31,2025-12-31,no,email,turned 65 in Sept
+112,Rufus Heath,rufus.heath@example.org,adult,2024-01-01,2027-01-31,2026-01-31,yes,email,
+113,Tamsin Weir,tamsin.weir@example.org,family,2019-12-01,2026-12-31,2025-12-31,yes,text,
+114,Godfrey Bramble,godfrey.b@example.org,honorary,2001-05-01,,,no,letter,life member
+115,Juniper Fold,juniper.fold@example.org,adult,2021-10-01,2026-10-31,2025-10-31,yes,email,
+116,Alder Crag,alder.crag@example.org,adult,2022-12-01,2026-12-31,2025-12-31,no,email,
+117,Clover Stream,clover.s@example.org,student,2025-09-01,2026-08-31,2025-08-31,no,email,
+118,Ptolemy Barrow,p.barrow@example.org,adult,2020-12-01,2026-12-31,2025-12-31,no,,
