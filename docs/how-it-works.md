@@ -96,7 +96,7 @@ uv run elicitagent replay /path/outside/the/repo/plant-care-*.json --sheet /path
 
 - `tasks/rota`: the volunteer rota for the monthly Larkfield Lane Folk Afternoon, framed as one occurrence of a monthly job: the intent reads "the way we do it every month", the event plan says the event runs every month, and Saturday 6 March 2027 is this month's date. The tool builds a brief for this occurrence only. This is the example that carries the report.
 - `tasks/inbox`: handing an inbox to a triage agent: a CSV of 40 invented emails and a notes file of rules.
-- `practice/`: six invented practice tasks (plant-care, cafe-order, litter-pick, renewals, supplier-invoices, issue-triage), each with `materials/` and `intent.txt` only, written by an AI agent on 25 Nov 2026 for trying the tool out overnight. They are not the test, and their draft answer sheets are kept outside the repository.
+- `practice/`: ten invented practice tasks, each with `materials/` and `intent.txt` only, written by an AI agent on 25 Nov 2026 for trying the tool out overnight: six for the first round (plant-care, cafe-order, litter-pick, renewals, supplier-invoices, issue-triage) and four for the second, whose gaps the folder mostly hints at (family-birthdays, flat-bills-split, hall-bookings-week, school-run-rota). They are not the test, and their draft answer sheets are kept outside the repository.
 
 Each has `materials/` (what the tool reads), `intent.txt` (one or two sentences of what the person wants the agent to do, which fills the box on the start page and which the harness types in) and an answer sheet named `ANSWER-SHEET-DRAFT-NOT-LOCKED.md`. The tool never reads the answer sheet. Every name, address, event and email is invented; addresses use `example.org` style domains.
 
