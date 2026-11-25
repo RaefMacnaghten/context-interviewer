@@ -378,9 +378,10 @@ function sourceView(key, documentName, passage, context, compact = false) {
   const toggle = el("button", { class: "source-toggle", "aria-expanded": open ? "true" : "false",
     onclick: () => {
       open ? openSources.delete(key) : openSources.add(key);
+      const keyboard = toggle.matches(":focus-visible"); // keep the keyboard's place; a mouse click needs no ring
       const again = sourceView(key, documentName, passage, context, compact);
       wrap.replaceWith(again);
-      again.querySelector(".source-toggle").focus({ preventScroll: true });
+      if (keyboard) again.querySelector(".source-toggle").focus({ preventScroll: true });
     } },
     `${open ? "Hide" : "Show"} source: ${documentName}`);
   const wrap = el("div", { class: "source" });
