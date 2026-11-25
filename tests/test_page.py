@@ -30,3 +30,13 @@ def test_show_source_opens_in_place_without_rebuilding_the_page():
     body = _function(APP.read_text(encoding="utf-8"), "sourceView")
     assert "render()" not in body
     assert "wrap.replaceWith(" in body and "preventScroll: true" in body
+
+
+def test_brief_items_show_a_short_excerpt_beside_the_source_link():
+    # the author's request of 25 Nov 2026: the short quoted excerpt beside the link, as the question card has
+    js = APP.read_text(encoding="utf-8")
+    body = _function(js, "sourceView")
+    assert 'class: "source-excerpt"' in body and "excerpt(passage)" in body and "title: passage" in body
+    assert "function excerpt(" in js
+    css = (APP.parent / "style.css").read_text(encoding="utf-8")
+    assert ".source-excerpt" in css and "text-overflow: ellipsis" in css

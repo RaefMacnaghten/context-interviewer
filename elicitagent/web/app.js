@@ -333,11 +333,18 @@ function sourceView(key, documentName, passage, context, compact = false) {
       again.querySelector(".source-toggle").focus({ preventScroll: true });
     } },
     `${open ? "Hide" : "Show"} source: ${documentName}`);
-  const wrap = el("div", { class: "source" }, toggle);
+  const wrap = el("div", { class: "source" });
   if (!open) {
-    if (!compact) wrap.append(el("div", { class: "source-quote" }, `"${passage}"`));
+    if (compact) {
+      // in the brief in progress: a short excerpt beside the link, one line; the whole passage on expand
+      wrap.append(el("div", { class: "source-line" }, toggle,
+        el("span", { class: "source-excerpt", title: passage }, `"${excerpt(passage)}"`)));
+    } else {
+      wrap.append(toggle, el("div", { class: "source-quote" }, `"${passage}"`));
+    }
     return wrap;
   }
+  wrap.append(toggle);
   const box = el("div", { class: "source-context" });
   if (context) {
     const n0 = context.line - context.before.length;
@@ -349,6 +356,15 @@ function sourceView(key, documentName, passage, context, compact = false) {
   }
   wrap.append(box);
   return wrap;
+}
+
+// The start of a passage, cut at a word and marked with an ellipsis when it is longer than about a line.
+function excerpt(passage, max = 80) {
+  const flat = passage.replace(/\s+/g, " ").trim();
+  if (flat.length <= max) return flat;
+  const cut = flat.slice(0, max);
+  const space = cut.lastIndexOf(" ");
+  return `${(space > max / 2 ? cut.slice(0, space) : cut).replace(/[\s,;:.]+$/, "")}…`;
 }
 
 function pct(p) { return `${Math.round(p * 100)}%`; }
