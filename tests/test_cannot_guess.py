@@ -162,6 +162,7 @@ def test_with_the_setting_off_the_old_behaviour_comes_back(tmp_path):
     table = table_with(AskTable.load(), ask_while_questions_remain=False)
     s = Session(folder, "", SimulatedModel.for_folder(folder), table=table, runs_dir=tmp_path / "runs", limit=None).start()
     assert [it.id for it in s.queue()] == ["x1"]
+    assert all(s.get(i).cannot_guess for i in ("t1", "p1", "w1"))
     for i in ("t1", "p1", "r1", "r2", "d1"):
         assert s.get(i).way == "wait" and s.get(i).state == "open" and not s.get(i).pending
 
@@ -220,7 +221,7 @@ def test_regression_the_new_rule_asks_until_the_limit(tmp_path):
     left = [it.id for it in s.queue()]
     assert left == ["n6"]  # the least valuable gap is the one still waiting
     line = [l for l in read_trace(s.trace.path) if l["event"] == "limit reached"][-1]
-    assert "at least 1 more questions" in line["value"]  # the continue-or-stop message says how many more
+    assert "at least 1 more question " in line["value"]  # the continue-or-stop message says how many more
     assert s.view()["at_limit"]["questions"] == 1
     for i in ("s1", "s2"):
         assert s.get(i).state == "assumed"  # what the rule may guess is still guessed and marked
@@ -413,3 +414,26 @@ def test_the_limit_screen_numbers_follow_the_queue_and_the_ask_table(tmp_path):
     t = fete(tmp_path / "one", table=table, limit=5)
     run_to_the_end(t)
     assert t.view()["at_limit"]["button"] == "Allow up to 1 more question"
+
+
+def test_with_the_setting_off_the_queue_is_by_value_alone(tmp_path):
+    # a nice-if-possible gap with nothing to guess from, asked on the rule's own arithmetic (0.9 x 9 / 2), is not
+    # put behind a less valuable question when the setting is off
+    rows = [("g1", "Goal and deliverable", "goal", "What the agent should do", "Tidy the yard", True, None),
+            ("a1", "Times", "start", "When to start", "09:00", True, (0.9, True, True)),
+            ("n1", "Rules", "skip", "Whether the old skip may go", None, False, (0.9, False, False))]
+    folder = write_task(tmp_path, "yard", rows, "Please tidy the yard.")
+    off = table_with(AskTable.load(), ask_while_questions_remain=False)
+    s = Session(folder, "", SimulatedModel.for_folder(folder), table=off, runs_dir=tmp_path / "runs", limit=None).start()
+    assert [it.id for it in s.queue()] == ["n1", "a1"]
+    on = Session(folder, "", SimulatedModel.for_folder(folder), runs_dir=tmp_path / "runs2", limit=None).start()
+    assert [it.id for it in on.queue()] == ["a1", "n1"]  # with it on, nice if possible comes after
+
+
+def test_a_clash_reason_reads_once():
+    import tempfile
+
+    rota = Path(__file__).resolve().parent.parent / "tasks" / "rota" / "materials"
+    s = Session(rota, "", SimulatedModel.for_folder(rota), runs_dir=tempfile.mkdtemp(), limit=None).start()
+    clash = next(it for it in s.items if it.state == "conflict")
+    assert clash.reason == "Asked: the documents disagree, a clash is never guessed, and questions remain."

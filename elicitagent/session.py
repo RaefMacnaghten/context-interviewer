@@ -550,7 +550,9 @@ class Session:
                 it.reason = f"Left open: {disagree}, a clash is never guessed, and the never-ask rule asks nothing."
             else:
                 it.way = "ask"
-                if d.way == "ask":
+                if d.way == "ask" and d.cannot_guess:
+                    it.reason = f"Asked: {disagree}, a clash is never guessed, and questions remain."
+                elif d.way == "ask":
                     it.reason = d.reason + f" {sides}."
                 else:
                     it.reason = f"Asked: {disagree}. A clash is always asked, whatever the rule's arithmetic says."
@@ -573,7 +575,10 @@ class Session:
         first. The clash with the person's intent comes first of all. Among the gaps the tool cannot guess, those
         that are only nice if possible come after everything else (the ask table's must_hold_first setting)."""
         waiting = [it for it in self.items if it.pending and not it.rejected]
-        nice_last = bool(self.table.cannot_guess.get("must_hold_first", True))
+        # the order applies only when gaps the tool cannot guess are asked as such; with the setting off, or under
+        # a rule not listed, the queue is by value alone, as before
+        nice_last = bool(self.table.cannot_guess.get("must_hold_first", True)) and \
+            self.table.asks_what_cannot_be_guessed(self.rule)
         return sorted(waiting, key=lambda it: (not it.ask_first, nice_last and it.cannot_guess and not it.must_hold,
                                                -it.value_order))
 
@@ -612,7 +617,8 @@ class Session:
             self._limit_logged_at = self.limit
             need = self.still_needed()
             self._log(self.queue()[0], "limit reached",
-                      f"limit {self.limit} questions; at least {need['questions']} more questions "
+                      f"limit {self.limit} questions; at least {need['questions']} more "
+                      f"{'question' if need['questions'] == 1 else 'questions'} "
                       f"(question cost {need['cost']:g})")
 
     def _not_finished(self) -> None:

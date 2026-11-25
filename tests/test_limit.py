@@ -35,7 +35,7 @@ def test_limit_starts_at_8_and_is_counted_in_questions(tmp_path):
     assert s.at_limit() and s.limit_reached
     lines = read_trace(s.trace.path)
     reached = [l for l in lines if l["event"] == "limit reached"]
-    assert len(reached) == 1 and reached[0]["value"].startswith("limit 8 questions; at least 1 more questions")
+    assert len(reached) == 1 and reached[0]["value"].startswith("limit 8 questions; at least 1 more question (")
     assert lines[-1]["limit_reached"] is True
 
 
