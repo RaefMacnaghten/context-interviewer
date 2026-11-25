@@ -104,3 +104,11 @@ def test_the_page_scrolls_to_the_question_line_only_when_a_new_question_comes_up
     # moved the page from 269 to 593 pixels, towards the line the question fills
     body = _function(APP.read_text(encoding="utf-8"), "render")
     assert "qid !== scrolledFor" in body and "scrolledFor = qid" in body
+
+
+def test_the_review_stage_looked_back_at_shows_no_stray_text():
+    # seen in the click-through: looking back at the Review stage after the brief was written showed "null" at
+    # the top (a missing header passed to append) and still said "Then write it"
+    end = _function(APP.read_text(encoding="utf-8"), "renderEndScreen")
+    assert "pane.append(...[" in end and "].filter(Boolean));" in end
+    assert "as the brief now stands" in end

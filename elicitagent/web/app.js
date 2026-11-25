@@ -606,11 +606,13 @@ function renderEndScreen(pane, readOnly = false) {
       it.state === "open" || it.state === "conflict" ? el("span", { class: `tag ${it.must_hold_or_nice === "must hold" ? "must" : "nice"} rv-tag` }, shown(it.must_hold_or_nice)) : null,
       extra ? extra(it) : null)))) : null;
   if (!readOnly) pane.className = "panel q-pane";
-  pane.append(
+  pane.append(...[
     readOnly ? null : el("div", { class: "ph" }, el("span", { class: "glyph", "aria-hidden": "true" }, "◉"), "Review before the brief is written"),
     el("div", { class: "pb" }, ...[
       // the "Still open" block is shown once, at the top of the brief in progress beside this screen
-      el("p", {}, `No more questions. Asked ${view.question_count}. Check the brief in progress once: confirm, edit or reject anything. Then write it.`),
+      readOnly
+        ? el("p", {}, `Asked ${view.question_count}. What is still waiting, guessed or for someone else${view.finished ? ", as the brief now stands" : ""}.`)
+        : el("p", {}, `No more questions. Asked ${view.question_count}. Check the brief in progress once: confirm, edit or reject anything. Then write it.`),
       section("Waiting", "Not settled. Answer any you can here; the brief passes the rest to the agent as \"ask before you do this\".", waiting, null, readOnly ? null : reviewAnswer),
       section("Guessed and marked", "The tool guessed these. Confirm or edit any you can.", assumed, "assumed"),
       section(shown("not available here"), "You could not answer these, and the folder does not hold them. Say who could, if you know.", unavailable, "not available here", readOnly ? (it) => (it.who_could ? el("span", { class: "muted" }, ` · ${it.who_could}`) : null) : (it) => {
@@ -620,7 +622,7 @@ function renderEndScreen(pane, readOnly = false) {
       }),
       readOnly ? null : el("button", { class: "b pr big", onclick: finish }, "Write the brief"),
     ].filter(Boolean)),
-  );
+  ].filter(Boolean));
 }
 
 // A very small Markdown view for the brief: headings, lists, bold, italics, quotes. Text is escaped first.
