@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-from elicitagent.harness import parse_sheet  # noqa: E402
+from elicitagent.harness import parse_sheet, same_answer  # noqa: E402
 
 TO_JUDGE = ("wrong", "to mark by hand")
 
@@ -32,7 +32,7 @@ def value_key(task: str, row: str, value: str) -> str:
 
 
 def replay_lines(replays: Path):
-    for path in sorted(replays.rglob("*.jsonl")):
+    for path in sorted(replays.glob("*/*.jsonl")):  # one directory per setting; not the sessions' gap traces
         for line in path.read_text(encoding="utf-8").splitlines():
             if line.strip():
                 yield json.loads(line)
@@ -43,12 +43,20 @@ def prepare(replays: Path, sheets: dict[str, Path], out: Path, seed: int = 20261
     seen: dict[str, dict] = {}
     for r in replay_lines(replays):
         for it in r["items"]:
-            if it["outcome"] not in TO_JUDGE or not it["row"] or not (it["value"] or "").strip():
+            if not it["row"]:
                 continue
             row = rows[r["task"]][it["row"]]
-            key = value_key(r["task"], it["row"], it["value"])
-            seen.setdefault(key, {"task": r["task"], "row": it["row"], "item": row.item, "right_answer": row.answer,
-                                  "given": it["value"], "form": row.form})
+            values = []
+            if it["outcome"] in TO_JUDGE and (it["value"] or "").strip():
+                values.append(it["value"])  # what ended in the brief
+            held = (it.get("model_value") or "").strip()
+            if it["chance_wrong"] is not None and not it["conflict"] and held and not (
+                    row.form in ("exact", "yes or no") and same_answer(held, row.key_answer)):
+                values.append(held)  # the value the model held for a gap, for the calibration table
+            for value in values:
+                key = value_key(r["task"], it["row"], value)
+                seen.setdefault(key, {"task": r["task"], "row": it["row"], "item": row.item,
+                                      "right_answer": row.answer, "given": value, "form": row.form})
     keys = sorted(seen)
     random.Random(seed).shuffle(keys)
     judge = [{"id": f"v{n:04d}", "item": seen[k]["item"], "right_answer": seen[k]["right_answer"],
