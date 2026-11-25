@@ -734,6 +734,7 @@ function renderItems() {
             (it.sources.some((src) => src.person) ? "Your intent and the folder disagree: " : "Documents disagree: ")
               + it.sources.map((src) => `${src.value} (${src.person ? "you" : src.document})`).join(" vs ")) : null,
           it.passage ? sourceView(`i-${it.id}`, it.document, it.passage, it.context, true) : null,
+          it.origin ? el("div", { class: "origin" }, it.origin) : null,
           ...(it.sources || []).map((src, n) => sourceView(`i-${it.id}-${n}`, src.document, src.passage, src.context, true)),
           editing === it.id ? editBox(it) : null,
         ].filter(Boolean)),

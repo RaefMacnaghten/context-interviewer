@@ -128,3 +128,21 @@ def test_a_confirmed_item_has_no_confirm_button(tmp_path):
     assert not any(v["can_confirm"] for v in s.view()["items"] if v["state"] == "conflict")
     js = (Path(__file__).resolve().parent.parent / "elicitagent" / "web" / "app.js").read_text()
     assert "it.can_confirm ?" in js
+
+
+def test_every_item_says_where_it_came_from(tmp_path):
+    # seen by the author: "Qualified first aider after 18:00" (inferred, must hold) had no source link
+    s = Session(ROTA, "the rota", SimulatedModel.for_folder(ROTA), runs_dir=tmp_path, limit=None).start()
+    for v in s.view()["items"]:
+        shows_passage = bool(v["sources"]) or bool(v["document"] and v["passage_found"])
+        assert shows_passage or v["origin"], v["label"]
+        assert not (shows_passage and v["origin"])
+    it = next(i for i in s.items if not i.sources and not i.document and i.way != "said by the person")
+    assert s.origin(it) == "Not in any file: worked out from the folder as a whole and what you typed."
+    it.document = "volunteers.csv"
+    it.passage_found = False
+    assert s.origin(it) == "Not quoted in any file: worked out from volunteers.csv."
+    said = Session(ROTA, (ROTA.parent / "intent.txt").read_text(), SimulatedModel.for_folder(ROTA),
+                   runs_dir=tmp_path, limit=None).start()
+    typed = [i for i in said.items if i.way == "said by the person"]
+    assert typed and said.origin(typed[0]) == "From what you typed on the start page."

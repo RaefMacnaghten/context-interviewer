@@ -240,6 +240,7 @@ label.ph { display: block; cursor: text; }
 
 /* source passage, expanded in place */
 .source { display: grid; gap: 4px; }
+.origin { font-size: 12px; color: var(--muted); }
 .source-toggle { justify-self: start; font: inherit; font-size: 12px; color: var(--accent); background: none; border: 0; padding: 0; cursor: pointer; text-decoration: underline; text-underline-offset: 2px; }
 .source-quote { font-family: var(--serif); font-size: 13.5px; border-left: 3px solid var(--line-2); padding: 2px 0 2px 10px; color: var(--muted); }
 .source-context { font-family: var(--mono); font-size: 12px; border: 1px solid var(--line-2); border-radius: 8px; background: var(--surface-2); overflow: hidden; }

@@ -852,8 +852,21 @@ class Session:
         a waiting item that has a value). A confirmed item, from a file or from the person, has nothing to confirm."""
         return bool(it.value) and not it.rejected and it.state in ("assumed", "open")
 
+    def origin(self, it: Item) -> str | None:
+        """Where an item came from, in one plain line, for an item that has no passage to show. None when the item
+        shows its passage (or a clash shows each side's passage) instead."""
+        if it.way == SAID:
+            return "From what you typed on the start page."
+        if it.sources or (it.document and it.passage_found):
+            return None
+        if it.document:
+            return f"Not quoted in any file: worked out from {it.document}."
+        whole = "the folder as a whole and what you typed" if self.intent else "the folder as a whole"
+        return f"Not in any file: worked out from {whole}."
+
     def item_view(self, it: Item) -> dict:
         d = asdict(it)
+        d["origin"] = self.origin(it)
         d["way_tag"] = self.way_tag(it)
         d["can_confirm"] = self.can_confirm(it)
         d["stated_or_inferred"] = it.stated_or_inferred
