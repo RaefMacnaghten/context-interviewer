@@ -1,0 +1,23 @@
+SENT CONFIRMATIONS - copies I keep, most recent first
+
+Mon 23 Nov  Refunded Jory Example's £50 deposit, Hettie said all clean.
+Fri 20 Nov  To: Walt Placeholder  Subject: Your booking: Tue 24 Nov, Main Hall
+            "Hi Walt, all set for Tuesday ... Please leave the chairs stacked in fives against the back wall. Fenella, Bookings, Wexample Village Hall"
+Fri 20 Nov  To: Pim Sample  Subject: Your booking: Tue 24 Nov, Small Room
+Fri 20 Nov  To: Clem Example  Subject: Your booking: Thu 26 Nov, Main Hall
+Sat 14 Nov  To: Jory Example (one-off, christening tea)  Subject: Your booking: Sun 22 Nov, Main Hall
+            "Dear Jory, ... map attached ... £50 deposit, refundable ..."
+Fri 13 Nov  No reminders to regulars this week, nothing had changed.
+Fri 6 Nov   To: Pim Sample  Subject: Your booking: Tue 10 Nov, Main Hall
+            "Hi Pim, the Small Room has the flu clinic so you're in the Main Hall this week."
+Fri 30 Oct  To: Clem Example  Subject: Your booking: Thu 5 Nov, Main Hall
+Fri 16 Oct  To: Bea Sample (one-off, quiz night)  Subject: Your booking: Sat 24 Oct, Main Hall
+            "Hi Bea, ... map attached ... bar fine, licence holder Bea's dad ..."
+Fri 9 Oct   To: Ned Sample  Subject: Your booking: Sun 18 Oct, Main Hall
+            "Hi Ned, I've asked Gus to get the stage blocks out for you."
+Fri 2 Oct   To: Ivo Testwell  Subject: Your booking: Mon 5 Oct, Main Hall
+            "Hi Ivo, the urn will be on by 6.45."
+Fri 25 Sep  To: Pim Sample  Subject: Your booking: Tue 29 Sep, Main Hall
+            "Hi Pim, you're in the Main Hall this week, the Small Room ceiling is being patched."
+Fri 18 Sep  To: Clem Example  Subject: Your booking: Thu 24 Sep, Main Hall
+Sat 12 Sep  To: Ottoline Sample (enquiry only)  "Dear Ottoline, the 5 December is free, I've pencilled you in."

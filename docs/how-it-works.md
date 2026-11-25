@@ -80,11 +80,23 @@ Each item is matched to the sheet row that fits it best, once for the whole run,
 uv run elicitagent dry-run tasks/rota --model simulated
 ```
 
+**Frozen replay: every rule on one first look.** A dry run reads the folder afresh each time, and which items one run finds can differ from the next by more than any rule changes. Frozen replay holds the item list still. `freeze` runs the tool's own start once (reading, first look, clash check, second look, estimates) and saves every model reply, including each gap's chance-wrong estimate and its two yes-or-no answers. `replay` starts the tool's own session again on those saved replies, with no model call, under every setting: cost-weighted at k = 0.25, 0.5, 1, 2 and 4; confidence-only at t = 0.1 to 0.5; always ask; never ask; cost-weighted under each other harm ratio (by default the ask table's `[harm_alternatives]`, or `--harm 1,2,4` given at run time; `asktable.toml` is not changed); and the model deciding freely. The script plays the person from the sheet and marks every item the same way for every setting. The ask table, the queue and the replies are the tool's own code; a test checks that a replay decides exactly as a live run on the same replies. The call that words the questions is left out (it changes no decision, and the plain template is used). The script does not answer on the end screen unless `--review` is given, so what a rule leaves open stays open. This is a test design, not part of the tool; it changes nothing the tool decides.
+
+```sh
+uv run elicitagent freeze practice/plant-care --model anthropic --out /path/outside/the/repo/plant-care-1.json
+uv run elicitagent replay /path/outside/the/repo/plant-care-*.json --sheet /path/to/plant-care-answer-sheet.md --out /path/outside/the/repo/plant-care.jsonl
+```
+
+**Experimental settings, off by default and not adopted.** `--experiment` on `dry-run` and `freeze` switches on a candidate change to what the real model is asked when it reads the folder, so a frozen replay can compare it with the tool as it is. They were made by an AI agent on 25 Nov 2026 as candidate answers to two design findings from the practice runs; the author decides whether any is kept. With no `--experiment`, the model is asked exactly what it was asked before (a test pins this). They cannot be used with the simulated model.
+
+- `e1-table-rows`: the first look lists each row of a table that the task acts on as its own item, instead of one item for the whole table.
+- `e2-hints-are-guesses`: a value the folder only hints at (a usual pattern, last period's value, a default) is listed with stated false, with the document and passage it came from, and the second look does not count it as found; so it reaches the ask table as a guess candidate with its source instead of being filled from the file as settled. Only a value the folder states outright for this occasion (or a rule it gives as always applying) is settled. The estimate is asked how likely the hinted value is to be wrong for this occasion.
+
 ## Task folders
 
 - `tasks/rota`: the volunteer rota for the monthly Larkfield Lane Folk Afternoon, framed as one occurrence of a monthly job: the intent reads "the way we do it every month", the event plan says the event runs every month, and Saturday 6 March 2027 is this month's date. The tool builds a brief for this occurrence only. This is the example that carries the report.
 - `tasks/inbox`: handing an inbox to a triage agent: a CSV of 40 invented emails and a notes file of rules.
-- `practice/`: six invented practice tasks (plant-care, cafe-order, litter-pick, renewals, supplier-invoices, issue-triage), each with `materials/` and `intent.txt` only, written by an AI agent on 25 Nov 2026 for trying the tool out overnight. They are not the test, and their draft answer sheets are kept outside the repository.
+- `practice/`: ten invented practice tasks, each with `materials/` and `intent.txt` only, written by an AI agent on 25 Nov 2026 for trying the tool out overnight: six for the first round (plant-care, cafe-order, litter-pick, renewals, supplier-invoices, issue-triage) and four for the second, whose gaps the folder mostly hints at (family-birthdays, flat-bills-split, hall-bookings-week, school-run-rota). They are not the test, and their draft answer sheets are kept outside the repository.
 
 Each has `materials/` (what the tool reads), `intent.txt` (one or two sentences of what the person wants the agent to do, which fills the box on the start page and which the harness types in) and an answer sheet named `ANSWER-SHEET-DRAFT-NOT-LOCKED.md`. The tool never reads the answer sheet. Every name, address, event and email is invented; addresses use `example.org` style domains.
 

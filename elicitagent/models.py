@@ -328,6 +328,60 @@ WORDING_SCHEMA = {
 }
 
 
+# Experiments: candidate changes to what the first look lists, each behind its own setting, OFF by default. They are
+# NOT adopted: they exist so a frozen replay can compare them with the tool as it is. With every setting off, every
+# prompt is exactly the one above.
+E1_TABLE_ROWS = "e1-table-rows"
+E2_HINTS_ARE_GUESSES = "e2-hints-are-guesses"
+EXPERIMENTS = {
+    E1_TABLE_ROWS: "the first look lists each row of a table that the task acts on as its own item",
+    E2_HINTS_ARE_GUESSES: "a value the folder only hints at is a guess candidate with its source, not settled",
+}
+
+E1_LIST = """
+
+Tables the task acts on (an experimental setting): when the task acts on the rows of a table, such as one line per thing to order, one line per person to remind or one line per job to do, list each such row as its own item, with its own key and a label that names the row, instead of one item for the whole table. Give each row's value for this occasion as the folder gives it, with that row's document and passage."""
+
+
+E2_LIST = """
+
+Hints are not statements (an experimental setting): stated is true only when a document states the value outright for this occasion. A rule the folder gives as always applying counts as stated. A value the folder only hints at, such as a usual pattern ("we normally"), last period's value (last week's list, last month's order) or a default (a general guide, a template), is not stated: give that value as value and in candidates with stated false, and give the document and the passage it came from, so it can be checked as a guess."""
+
+E2_SECOND_LOOK = """
+
+Hints are not statements (an experimental setting): found is true only when a document states the value outright for this occasion. A rule the folder gives as always applying counts. A usual pattern, last period's value or a default only hints at the value: return found false for it."""
+
+E2_ESTIMATE = """
+
+Some items carry a value the folder only hints at (a usual pattern, last period's value, or a default), with the document and passage it came from. For those, chance_wrong is the chance that this hinted value is wrong for this occasion."""
+
+
+def check_experiments(experiments) -> frozenset[str]:
+    names = frozenset(experiments or ())
+    unknown = names - set(EXPERIMENTS)
+    if unknown:
+        raise ModelError(f"Unknown experiment: {', '.join(sorted(unknown))}. Known: {', '.join(sorted(EXPERIMENTS))}.")
+    return names
+
+
+def list_system(experiments=frozenset()) -> str:
+    """The first look's instructions, with each experiment that is switched on added at the end."""
+    system = LIST_SYSTEM.format(headings=", ".join(f'"{h}"' for h in ALL_HEADINGS))
+    if E1_TABLE_ROWS in experiments:
+        system += E1_LIST
+    if E2_HINTS_ARE_GUESSES in experiments:
+        system += E2_LIST
+    return system
+
+
+def second_look_system(experiments=frozenset()) -> str:
+    return SECOND_LOOK_SYSTEM + (E2_SECOND_LOOK if E2_HINTS_ARE_GUESSES in experiments else "")
+
+
+def estimate_system(experiments=frozenset()) -> str:
+    return ESTIMATE_SYSTEM + (E2_ESTIMATE if E2_HINTS_ARE_GUESSES in experiments else "")
+
+
 def _plain(text: str) -> str:
     return " ".join("".join(c.lower() if c.isalnum() else " " for c in text).split())
 
@@ -348,8 +402,9 @@ def _folder_as_text(folder: Folder) -> str:
 class AnthropicModel(Model):
     kind = "real"
 
-    def __init__(self, model_name: str | None = None, client=None):
+    def __init__(self, model_name: str | None = None, client=None, experiments=()):
         self.name = model_name or DEFAULT_MODEL_NAME
+        self.experiments = check_experiments(experiments)
         if client is None:
             if not os.environ.get("ANTHROPIC_API_KEY"):
                 raise ModelError("ANTHROPIC_API_KEY is not set. Set it, or run with the simulated model.")
@@ -401,7 +456,7 @@ class AnthropicModel(Model):
             raise ModelError(f"The model returned invalid JSON: {exc}") from exc
 
     def list_items(self, intent: str, folder: Folder, on_partial=None) -> list[dict]:
-        system = LIST_SYSTEM.format(headings=", ".join(f'"{h}"' for h in ALL_HEADINGS))
+        system = list_system(self.experiments)
         user = f"{_intent_block(intent)}\n\nThe folder:\n{_folder_as_text(folder)}"
         on_text = (lambda buf: on_partial(complete_objects(buf, "items"))) if on_partial else None
         return self._call(system, user, LIST_SCHEMA, on_text)["items"]
@@ -415,7 +470,7 @@ class AnthropicModel(Model):
             f"Look again for each of these items:\n{json.dumps(slim, indent=1)}"
         )
         on_text = (lambda buf: on_partial(len(complete_objects(buf, "results")))) if on_partial else None
-        data = self._call(SECOND_LOOK_SYSTEM, user, SECOND_LOOK_SCHEMA, on_text)
+        data = self._call(second_look_system(self.experiments), user, SECOND_LOOK_SCHEMA, on_text)
         out: dict[str, dict | None] = {item["id"]: None for item in items}
         for r in data["results"]:
             if r.get("id") in out and r.get("found") and r.get("value") and r.get("document") and r.get("passage"):
@@ -432,7 +487,7 @@ class AnthropicModel(Model):
             f"The items:\n{json.dumps(slim, indent=1)}"
         )
         on_text = (lambda buf: on_partial(len(complete_objects(buf, "estimates")))) if on_partial else None
-        data = self._call(ESTIMATE_SYSTEM, user, ESTIMATE_SCHEMA, on_text)
+        data = self._call(estimate_system(self.experiments), user, ESTIMATE_SCHEMA, on_text)
         return {e["id"]: e for e in data["estimates"]}
 
     def word_questions(self, intent: str, folder: Folder, items: list[dict]) -> dict[str, dict]:
@@ -446,12 +501,16 @@ class AnthropicModel(Model):
                 for q in data["questions"] if q.get("id") in wanted and q.get("question", "").strip()}
 
 
-def make_model(choice: str, folder_path: str | Path, model_name: str | None = None) -> Model:
-    """choice: "simulated", "anthropic" or "auto" (the API when a key is set, else simulated)."""
+def make_model(choice: str, folder_path: str | Path, model_name: str | None = None, experiments=()) -> Model:
+    """choice: "simulated", "anthropic" or "auto" (the API when a key is set, else simulated). An experiment changes
+    what the real model is asked, so it cannot be switched on for the simulated model."""
+    experiments = check_experiments(experiments)
     if choice == "auto":
         choice = "anthropic" if os.environ.get("ANTHROPIC_API_KEY") else "simulated"
     if choice == "simulated":
+        if experiments:
+            raise ModelError("Experiments change what the real model is asked; the simulated model cannot follow them.")
         return SimulatedModel.for_folder(folder_path)
     if choice == "anthropic":
-        return AnthropicModel(model_name)
+        return AnthropicModel(model_name, experiments=experiments)
     raise ModelError(f"Unknown model choice: {choice}")

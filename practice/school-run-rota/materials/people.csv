@@ -1,0 +1,12 @@
+name,role,family,age,seat_or_car,notes
+Isla Example,child,Example,9,adult belt,Year 5; netball Wed till 4:30
+Rory Example,child,Example,6,backless booster,Year 2; inhaler
+Nell Sample,child,Sample,8,backless booster,Year 4; piano Tue straight from school (Jo collects)
+Theo Testwell,child,Testwell,10,adult belt,Year 6; chess club Thu till 4:15
+Zara Placeholder,child,Placeholder,5,high-back booster (always),Reception; lives at 14 Example Lane
+Hamish Example,driver,Example,,estate car; 3 in the back,me
+Jo Sample,driver,Sample,,hatchback; 3 in the back,
+Kofi Testwell,driver,Testwell,,people carrier; 5 in the back,spare backless booster in the boot
+Priya Placeholder,driver,Placeholder,,hatchback; 3 in the back,
+Granny Moira,backup driver,Example,,small hatchback; 2 in the back,Hamish's mum
+Granny Sample,collects Nell only,Sample,,does not drive the car share,

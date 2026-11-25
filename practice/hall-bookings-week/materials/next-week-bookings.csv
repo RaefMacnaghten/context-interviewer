@@ -1,0 +1,13 @@
+date,day,start,end,room,hirer,type,fee,paid,notes
+2026-11-30,Mon,09:30,11:30,usual,Wexample Knit and Natter,regular,18.00,yes,
+2026-11-30,Mon,19:00,21:00,usual,Wexample Parish Council,regular,28.00,yes,monthly meeting
+2026-12-01,Tue,10:00,11:00,usual,Pim Yoga,regular,9.00,yes,
+2026-12-01,Tue,19:30,21:30,usual,Short Mat Bowls,regular,28.00,yes,
+2026-12-02,Wed,10:00,12:00,Small Room,Coffee morning,regular,18.00,yes,moved from Thursday this week only
+2026-12-02,Wed,19:00,22:00,usual,Wexample Bridge Club,regular,42.00,yes,
+2026-12-03,Thu,18:00,19:30,usual,Wexample Little Owls,regular,21.00,yes,
+2026-12-03,Thu,19:30,21:30,usual,Wexample Players,regular,20.00,yes,rehearsal
+2026-12-04,Fri,19:00,22:30,Main Hall,Wexample Players,regular,35.00,no,dress rehearsal; runs to 22:30 this week
+2026-12-05,Sat,10:00,12:00,usual,Pim Yoga,regular,18.00,yes,
+2026-12-05,Sat,18:00,23:30,Main Hall,Ottoline Sample,one-off,77.00,yes,40th birthday party; bar; about 110 guests
+2026-12-06,Sun,14:00,17:00,Main Hall,Wexample Players,regular,30.00,yes,Christmas show

@@ -278,21 +278,13 @@ def is_waste(it: Item, row: SheetRow | None) -> bool | None:
     return bool(it.asked or it.answered_on_review) and row.where.strip().lower().startswith("file:")
 
 
-def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", threshold: float | None = None,
-            sheet: str | None = None, runs_dir: str | None = None, limit: int | None = None) -> int:
-    """One dry run. The question limit is off unless `limit` is given; with a limit, the script stops at it, as
-    a person pressing "Stop" on the limit screen would, and then answers on the end screen as usual."""
-    task_dir = Path(task).resolve()
-    materials = task_dir / "materials"
-    # The script playing the person supplies the intent from the task folder, so runs stay comparable.
-    intent_file = task_dir / "intent.txt"
-    intent = intent_file.read_text(encoding="utf-8").strip() if intent_file.is_file() else ""
-    sheet_path = Path(sheet) if sheet else find_sheet(task_dir)
-    rows = parse_sheet(sheet_path)
-    model = make_model(model_choice, materials)
-    # P9: the question limit is switched off in the test, unless a limit is asked for.
-    session = Session(materials, intent, model, rule=rule, threshold=threshold, runs_dir=runs_dir, limit=limit).start()
+def play(session: Session, rows: list[SheetRow], on_review: bool = True):
+    """The script plays the person through a started session: it answers every question from the sheet (stopping
+    at the limit, as a person pressing "Stop" would), then, when `on_review` is set, answers on the end screen
+    each item still waiting or open that it has a row for, and writes the brief.
 
+    Returns each item's row (fixed once for the whole run, one row to one item), the questions asked as
+    (item, kind, reply, row) and what was answered on the end screen as (item, kind, question cost, row)."""
     # each item's row, fixed once for the whole run, one row to one item; the intent the script typed has none
     rows_for = match_rows([it for it in session.items if it.way != SAID], rows)
     asked = []
@@ -308,8 +300,8 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
         asked.append((it.id, it.kind, action, row.id if row else None))
     # Plan change 1: on the end screen the person can answer what is still waiting or open. The script answers
     # each such item it has a row for, unless the row says the answer is nowhere to be had.
-    on_review = []
-    for it in session.items:
+    review = []
+    for it in session.items if on_review else []:
         if it.rejected or it.way == SAID or it.state not in ("open", "conflict"):
             continue
         row = rows_for.get(it.id)
@@ -318,21 +310,43 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
         action, value, _ = person_reply(it, row)
         if action == "answer":
             session.answer_on_review(it.id, value)
-            on_review.append((it.id, it.kind, it.cost, row.id))
+            review.append((it.id, it.kind, it.cost, row.id))
     session.finish()
+    return rows_for, asked, review
 
+
+def mark_all(session: Session, rows_for: dict[str, SheetRow]) -> dict[str, dict]:
+    """Every item marked against its row, with an outcome line in the gap trace for each."""
     outcomes = {}
-    matched_rows = set()
     for it in session.items:
         row = None if it.way == SAID else rows_for.get(it.id)
-        if row:
-            matched_rows.add(row.id)
         outcome = mark(it, row)
         waste = is_waste(it, row)
         outcomes[it.id] = {"label": it.label, "row": row.id if row else None, "state": it.state, "value": it.value,
                            "way": it.way, "answered_on_review": it.answered_on_review, "outcome": outcome,
                            "waste": waste}
         session._log(it, "outcome", it.value, outcome, waste)
+    return outcomes
+
+
+def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", threshold: float | None = None,
+            sheet: str | None = None, runs_dir: str | None = None, limit: int | None = None,
+            experiments=()) -> int:
+    """One dry run. The question limit is off unless `limit` is given; with a limit, the script stops at it, as
+    a person pressing "Stop" on the limit screen would, and then answers on the end screen as usual."""
+    task_dir = Path(task).resolve()
+    materials = task_dir / "materials"
+    # The script playing the person supplies the intent from the task folder, so runs stay comparable.
+    intent_file = task_dir / "intent.txt"
+    intent = intent_file.read_text(encoding="utf-8").strip() if intent_file.is_file() else ""
+    sheet_path = Path(sheet) if sheet else find_sheet(task_dir)
+    rows = parse_sheet(sheet_path)
+    model = make_model(model_choice, materials, experiments=experiments)
+    # P9: the question limit is switched off in the test, unless a limit is asked for.
+    session = Session(materials, intent, model, rule=rule, threshold=threshold, runs_dir=runs_dir, limit=limit).start()
+    rows_for, asked, on_review = play(session, rows)
+    outcomes = mark_all(session, rows_for)
+    matched_rows = {o["row"] for o in outcomes.values() if o["row"]}
     missed = [r.id for r in rows if r.id not in matched_rows]
 
     counts: dict[str, int] = {}
