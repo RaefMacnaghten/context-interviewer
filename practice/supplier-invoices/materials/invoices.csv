@@ -1,0 +1,15 @@
+invoice_no,supplier,invoice_date,due_date,amount,status,po
+SP-09,Spindlewick Pens,2026-10-12,2026-10-26,98.40,paid,PO-301
+GI-2190,Gallnut Inks,2026-10-05,2026-11-04,75.00,paid,PO-299
+TD-0917,Twine and Daughter,2026-10-20,2026-11-03,96.00,unpaid,PO-305
+PH-4410,Paperhollow Mills,2026-10-29,2026-11-28,412.60,unpaid,PO-306
+GI-2211,Gallnut Inks,2026-11-02,2026-12-02,312.00,unpaid,PO-307
+BC-118,Brightlingham Cards,2026-11-05,2026-11-19,165.00,unpaid,PO-308
+KW-77,Kestrelby Wrap,2026-11-06,on receipt,138.75,disputed,PO-309
+MB-3301,Marrowby Calendars,2026-11-09,2026-12-09,640.00,unpaid,PO-310
+TD-0931,Twine and Daughter,2026-11-10,2026-11-24,54.30,unpaid,PO-311
+PH-4452,Paperhollow Mills,2026-11-12,2026-12-12,288.40,unpaid,PO-312
+SP-12,Spindlewick Pens,2026-11-16,2026-11-30,177.20,unpaid,PO-313
+BC-121,Brightlingham Cards,2026-11-19,2026-12-03,220.50,unpaid,PO-314
+KW-79,Kestrelby Wrap,2026-11-20,2026-12-20,84.00,unpaid,PO-315
+LB-1126,Lanternet Business,2026-11-01,2026-11-14,38.00,paid,

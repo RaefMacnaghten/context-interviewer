@@ -1,0 +1,1 @@
+Every Monday, go through the issues opened on quillnote in the past week: label each one, close the duplicates and anything a release has already fixed, and leave a short reply on each so the reporter knows where it stands.
