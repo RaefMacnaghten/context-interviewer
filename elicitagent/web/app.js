@@ -887,8 +887,10 @@ function renderItems() {
         it.id === currentId ? el("span", { class: "now-tag" }, "this question") : null,
       ].filter(Boolean);
       list.append(el("li", { class: classes, id: `item-${it.id}` },
-        stateChip(state, it.rejected ? "Rejected" : (state === "not available here" && it.who_could ? `${shown(state)}: ${it.who_could}` : null)),
-        el("div", { class: "tx" }, el("span", { class: "item-label" }, it.label), it.value && it.state !== "conflict" ? el("span", { class: "item-value" }, `: ${it.value}`) : null),
+        stateChip(state, it.rejected ? "Rejected" : null),
+        el("div", { class: "tx" }, el("span", { class: "item-label" }, it.label),
+          it.value && it.state !== "conflict" ? el("span", { class: "item-value" }, `: ${it.value}`)
+            : state === "not available here" && it.who_could ? el("span", { class: "item-value who" }, `: ask ${it.who_could}`) : null),
         editing === it.id || reading ? null : itemControls(it),
         el("div", { class: "mt" }, tags),
         el("div", { class: "below" }, ...[

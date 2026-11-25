@@ -195,6 +195,7 @@ def test_the_three_display_labels_live_in_one_place_and_the_brief_uses_them(tmp_
 def test_the_page_takes_the_labels_from_the_server():
     js = (Path(__file__).resolve().parent.parent / "elicitagent" / "web" / "app.js").read_text()
     assert "config.labels" in js
+    assert "`: ask ${it.who_could}`" in js  # the status says Ask someone else; the line names who
     # no displayed "must hold", "nice if possible" or "Not available here" written into the page itself
     for word in ('"Not available here"', ">must hold<", "`${it.must_hold_or_nice}`"):
         assert word not in js
