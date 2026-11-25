@@ -554,9 +554,14 @@ function render() {
   renderProgress();
   renderItems();
   renderBrief();
+  // bring the line the question will fill into view only when a new question comes up, never on other clicks
+  // (Show source, Confirm, Edit, Reject), which would otherwise move the page under the person's pointer
   const current = document.querySelector(".items-list li.current");
-  if (current) current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  const qid = view.question && !view.finished ? view.question.item : null;
+  if (current && qid !== scrolledFor) current.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  scrolledFor = qid;
 }
+let scrolledFor = null; // the question whose line was last brought into view
 
 // P7 and P8: at the limit, say how much more seems needed, and let the person continue or stop.
 function renderLimit(pane) {

@@ -97,3 +97,10 @@ def test_no_leftover_yearly_wording_in_the_tool_or_the_task_intents():
             list((repo / "tasks").glob("*/intent.txt")) + list((repo / "practice").glob("*/intent.txt")):
         assert not yearly.search(path.read_text(encoding="utf-8")), path
     assert "every month" in (repo / "tasks" / "rota" / "intent.txt").read_text(encoding="utf-8")
+
+
+def test_the_page_scrolls_to_the_question_line_only_when_a_new_question_comes_up():
+    # reproduced in Chrome on PR 2's head: with a question waiting, clicking Show source near the top of the brief
+    # moved the page from 269 to 593 pixels, towards the line the question fills
+    body = _function(APP.read_text(encoding="utf-8"), "render")
+    assert "qid !== scrolledFor" in body and "scrolledFor = qid" in body
