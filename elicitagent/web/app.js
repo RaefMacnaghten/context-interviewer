@@ -323,8 +323,15 @@ async function reply(action, value, who) {
 function sourceView(key, documentName, passage, context, compact = false) {
   if (!documentName || !passage || documentName === "the person") return null;
   const open = openSources.has(key);
+  // Opening or closing a source changes only this box, in place: the rest of the page is not rebuilt, so nothing
+  // moves and the page does not scroll.
   const toggle = el("button", { class: "source-toggle", "aria-expanded": open ? "true" : "false",
-    onclick: () => { open ? openSources.delete(key) : openSources.add(key); render(); } },
+    onclick: () => {
+      open ? openSources.delete(key) : openSources.add(key);
+      const again = sourceView(key, documentName, passage, context, compact);
+      wrap.replaceWith(again);
+      again.querySelector(".source-toggle").focus({ preventScroll: true });
+    } },
     `${open ? "Hide" : "Show"} source: ${documentName}`);
   const wrap = el("div", { class: "source" }, toggle);
   if (!open) {

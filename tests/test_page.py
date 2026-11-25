@@ -16,3 +16,17 @@ def test_the_question_header_does_not_show_its_cost():
     assert "Question ${view.question_count + 1}" in head.group(1) and "${q.kind} question" in head.group(1)
     why = js[js.index("async function renderWhy"):js.index("async function control")]
     assert "question_cost" in why
+
+
+def _function(js, name):
+    start = js.index(f"function {name}(")
+    end = js.index("\nfunction ", start + 1)
+    return js[start:end]
+
+
+def test_show_source_opens_in_place_without_rebuilding_the_page():
+    # seen by the author: clicking "Show source" on a brief item jumped the page to the bottom, because the
+    # click rebuilt the whole page
+    body = _function(APP.read_text(encoding="utf-8"), "sourceView")
+    assert "render()" not in body
+    assert "wrap.replaceWith(" in body and "preventScroll: true" in body
