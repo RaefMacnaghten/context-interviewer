@@ -80,6 +80,13 @@ Each item is matched to the sheet row that fits it best, once for the whole run,
 uv run elicitagent dry-run tasks/rota --model simulated
 ```
 
+**Frozen replay: every rule on one first look.** A dry run reads the folder afresh each time, and which items one run finds can differ from the next by more than any rule changes. Frozen replay holds the item list still. `freeze` runs the tool's own start once (reading, first look, clash check, second look, estimates) and saves every model reply, including each gap's chance-wrong estimate and its two yes-or-no answers. `replay` starts the tool's own session again on those saved replies, with no model call, under every setting: cost-weighted at k = 0.25, 0.5, 1, 2 and 4; confidence-only at t = 0.1 to 0.5; always ask; never ask; cost-weighted under each other harm ratio (by default the ask table's `[harm_alternatives]`, or `--harm 1,2,4` given at run time; `asktable.toml` is not changed); and the model deciding freely. The script plays the person from the sheet and marks every item the same way for every setting. The ask table, the queue and the replies are the tool's own code; a test checks that a replay decides exactly as a live run on the same replies. The call that words the questions is left out (it changes no decision, and the plain template is used). The script does not answer on the end screen unless `--review` is given, so what a rule leaves open stays open. This is a test design, not part of the tool; it changes nothing the tool decides.
+
+```sh
+uv run elicitagent freeze practice/plant-care --model anthropic --out /path/outside/the/repo/plant-care-1.json
+uv run elicitagent replay /path/outside/the/repo/plant-care-*.json --sheet /path/to/plant-care-answer-sheet.md --out /path/outside/the/repo/plant-care.jsonl
+```
+
 ## Task folders
 
 - `tasks/rota`: the volunteer rota for the monthly Larkfield Lane Folk Afternoon, framed as one occurrence of a monthly job: the intent reads "the way we do it every month", the event plan says the event runs every month, and Saturday 6 March 2027 is this month's date. The tool builds a brief for this occurrence only. This is the example that carries the report.
