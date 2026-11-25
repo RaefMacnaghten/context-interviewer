@@ -115,3 +115,38 @@ def test_waste_is_a_question_the_folder_could_have_answered():
     clash = item("Clash: when pack down ends")
     clash.asked = True
     assert is_waste(clash, match_row(clash, r)) is False  # the tool always asks a clash
+
+
+def _summary(runs_dir):
+    import json
+
+    return json.loads(next(Path(runs_dir).rglob("dry-run-summary.json")).read_text())
+
+
+def test_the_dry_run_has_no_limit_by_default(tmp_path):
+    from elicitagent.harness import dry_run
+
+    dry_run(str(REPO / "tasks" / "rota"), model_choice="simulated", runs_dir=str(tmp_path))
+    s = _summary(tmp_path)
+    assert s["question_limit"] is None and not s["stopped_at_the_limit"] and s["questions_asked"] > 3
+
+
+def test_with_a_limit_the_script_stops_at_it(tmp_path):
+    from elicitagent.harness import dry_run
+    from elicitagent.trace import read_trace
+
+    dry_run(str(REPO / "tasks" / "rota"), model_choice="simulated", runs_dir=str(tmp_path), limit=3)
+    s = _summary(tmp_path)
+    assert s["question_limit"] == 3 and s["stopped_at_the_limit"] and s["questions_asked"] == 3
+    trace = read_trace(next(Path(tmp_path).rglob("gap-trace.jsonl")))
+    assert [l["event"] for l in trace].count("stop") == 1
+    # answering on the end screen afterwards is not a question: the count stays at the limit
+    assert max(l["question_count"] for l in trace) == 3
+
+
+def test_the_command_line_passes_the_limit(tmp_path):
+    from elicitagent.cli import main
+
+    assert main(["dry-run", str(REPO / "tasks" / "rota"), "--model", "simulated", "--runs-dir", str(tmp_path),
+                 "--limit", "2"]) == 0
+    assert _summary(tmp_path)["questions_asked"] == 2

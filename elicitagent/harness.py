@@ -214,7 +214,9 @@ def is_waste(it: Item, row: SheetRow | None) -> bool | None:
 
 
 def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", threshold: float | None = None,
-            sheet: str | None = None, runs_dir: str | None = None) -> int:
+            sheet: str | None = None, runs_dir: str | None = None, limit: int | None = None) -> int:
+    """One dry run. The question limit is off unless `limit` is given; with a limit, the script stops at it, as
+    a person pressing "Stop" on the limit screen would, and then answers on the end screen as usual."""
     task_dir = Path(task).resolve()
     materials = task_dir / "materials"
     # The script playing the person supplies the intent from the task folder, so runs stay comparable.
@@ -223,11 +225,16 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
     sheet_path = Path(sheet) if sheet else find_sheet(task_dir)
     rows = parse_sheet(sheet_path)
     model = make_model(model_choice, materials)
-    # P9: the question limit is switched off in the test.
-    session = Session(materials, intent, model, rule=rule, threshold=threshold, runs_dir=runs_dir, limit=None).start()
+    # P9: the question limit is switched off in the test, unless a limit is asked for.
+    session = Session(materials, intent, model, rule=rule, threshold=threshold, runs_dir=runs_dir, limit=limit).start()
 
     asked = []
-    while (it := session.current_question()) is not None:
+    while True:
+        if session.at_limit():
+            session.limit_choice("stop")  # the script stops at the limit
+        it = session.current_question()
+        if it is None:
+            break
         row = match_row(it, rows)
         action, value, who = person_reply(it, row)
         session.reply(it.id, action, value, who)
@@ -274,6 +281,8 @@ def dry_run(task: str, model_choice: str = "auto", rule: str = "cost-weighted", 
         "model_kind": model.kind,
         "answer_sheet": sheet_path.name,
         "answer_sheet_status": "DRAFT, NOT LOCKED" if "DRAFT" in sheet_path.name.upper() else "see file",
+        "question_limit": session.limit,
+        "stopped_at_the_limit": session.stopped,
         "questions_asked": session.question_count,
         "question_cost": session.running_cost,
         "outcomes": counts,
