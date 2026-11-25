@@ -85,3 +85,15 @@ def test_the_session_view_keeps_what_the_start_page_said(tmp_path):
     s.limit_choice("continue")
     v = s.view()
     assert v["folder"] == "tasks/rota/materials" and v["limit_at_start"] == 3 and v["limit"] == 11
+
+
+def test_no_leftover_yearly_wording_in_the_tool_or_the_task_intents():
+    # the author saw "the way we do it every year" on a run, though the rota task is monthly (commit 3edb4e9)
+    import re
+
+    repo = APP.parent.parent.parent
+    yearly = re.compile(r"every year|each year|yearly|annual", re.IGNORECASE)
+    for path in list((repo / "elicitagent").rglob("*.py")) + list((repo / "elicitagent" / "web").glob("*")) + \
+            list((repo / "tasks").glob("*/intent.txt")) + list((repo / "practice").glob("*/intent.txt")):
+        assert not yearly.search(path.read_text(encoding="utf-8")), path
+    assert "every month" in (repo / "tasks" / "rota" / "intent.txt").read_text(encoding="utf-8")
